@@ -8,3 +8,4 @@ templates
 packages/action
 test-results
 .github
+packages/cli/bundle
