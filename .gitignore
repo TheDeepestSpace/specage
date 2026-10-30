@@ -4,3 +4,4 @@ dist
 .env
 *.db
 test-results
+packages/cli/bundle

@@ -418,3 +418,14 @@ describe('install', () => {
     );
   });
 });
+
+describe('bundle (what `npx github:...` runs)', () => {
+  it('is self-contained: runs from a directory with no node_modules around it', () => {
+    const dir = tmp();
+    const copy = join(dir, 'specage.js');
+    writeFileSync(copy, readFileSync(join(root, 'packages/cli/bundle/specage.js')));
+    const r = spawnSync('node', [copy, 'lint', FIX], { encoding: 'utf8', cwd: dir });
+    expect(r.status, r.stderr).toBe(0);
+    expect(r.stdout).toContain('0 error(s)');
+  });
+});

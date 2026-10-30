@@ -13,5 +13,5 @@ npm run fixtures:update   # deliberately regenerate fixtures/tbgwaf golden files
 - Pin GitHub Actions by SHA.
 - Never write the project's `spec` or `spec-state` branches from code that runs in a code PR.
 - Anything that writes to a real project repo is HUMAN-CONFIRM.
-- `dist/` is not committed. The CLI builds on install (`prepare`), which is what makes
+- `dist/` and `packages/cli/bundle/` are not committed. `prepare` builds the CLI into one self-contained file (esbuild bundle), which, which is what makes
   `npx --yes github:TheDeepestSpace/specage#v0 <cmd>` work.
