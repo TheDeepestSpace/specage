@@ -48,6 +48,6 @@ export function loadEnv(e: NodeJS.ProcessEnv = process.env): Env {
     authorName: e.AUTHOR_NAME ?? 'specage',
     authorEmail: e.AUTHOR_EMAIL ?? 'specage@users.noreply.github.com',
     dbPath: e.DB_PATH ?? (dev ? resolve('specage-dev.db') : '/data/specage.db'),
-    webDist: e.WEB_DIST ?? join(here, '..', '..', 'web', 'dist'),
+    webDist: resolve(e.WEB_DIST ?? join(here, '..', '..', 'web', 'dist')),
   };
 }

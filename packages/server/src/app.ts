@@ -390,7 +390,8 @@ export function createApp({ env, db, github, now = Date.now }: Deps) {
   function serveIndex(c: Context) {
     const p = join(env.webDist, 'index.html');
     if (!existsSync(p)) return c.text('web build missing', 503);
-    return c.body(readFileSync(p), 200, { 'Content-Type': MIME['.html'] });
+    // the build uses relative asset URLs (for GitHub Pages); make them absolute for nested routes like /r/o/r
+    return c.body(readFileSync(p, 'utf8').replaceAll('="./assets/', '="/assets/'), 200, { 'Content-Type': MIME['.html'] });
   }
   app.get('*', (c) => {
     const path = new URL(c.req.url).pathname;
