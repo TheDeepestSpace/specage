@@ -13,8 +13,26 @@ export interface StateIssue {
   message: string;
 }
 
+const HASH_KEYS = new Set(['spec_hash', 'hash']);
+
+/**
+ * YAML.parse that keeps hash values as strings. A 12-hex-digit hash such as 123456789012 or
+ * 12e456789012 is a valid YAML number, and would otherwise lose its text (and fail the schema).
+ */
+export function parseYaml(text: string): unknown {
+  const doc = YAML.parseDocument(text);
+  YAML.visit(doc, {
+    Pair(_, pair) {
+      const k = pair.key as any;
+      const v = pair.value as any;
+      if (HASH_KEYS.has(String(k?.value)) && YAML.isScalar(v) && typeof v.value === 'number' && v.source !== undefined) v.value = v.source;
+    },
+  });
+  return doc.toJS() ?? undefined;
+}
+
 function readYaml(p: string): unknown {
-  return existsSync(p) ? (YAML.parse(readFileSync(p, 'utf8')) ?? undefined) : undefined;
+  return existsSync(p) ? parseYaml(readFileSync(p, 'utf8')) : undefined;
 }
 
 export function parseState(raw: { trace?: unknown; work?: unknown; questions?: unknown }): {

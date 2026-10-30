@@ -143,3 +143,22 @@ describe('grammar fixtures', () => {
     });
   }
 });
+
+import { createHash } from 'node:crypto';
+import { sha256Hex } from '../src/hash.js';
+describe('sha256', () => {
+  it('matches node:crypto', () => {
+    for (const s of ['', 'abc', 'x'.repeat(55), 'x'.repeat(56), 'x'.repeat(64), 'héllo wörld ✓'.repeat(20)])
+      expect(sha256Hex(s)).toBe(createHash('sha256').update(s, 'utf8').digest('hex'));
+  });
+});
+
+import { parseYaml, parseState } from '../src/index.js';
+describe('yaml hashes', () => {
+  it('keeps numeric-looking hashes as strings', () => {
+    for (const h of ['000000000000', '123456789012', '12e456789012', '0e1234567890'])
+      expect((parseYaml(`nodes:\n  a: {spec_hash: ${h}, status: planned}`) as any).nodes.a.spec_hash).toBe(h);
+    const { issues } = parseState({ trace: parseYaml('nodes:\n  a: {spec_hash: 123456789012, status: planned}'), work: parseYaml('items:\n - {id: w, state: filed, claims: {a: {hash: 000000000001, status: done}}}') });
+    expect(issues).toEqual([]);
+  });
+});
