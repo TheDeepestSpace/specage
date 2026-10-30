@@ -2,7 +2,9 @@ import { expect, test } from '@playwright/test';
 
 const URL = 'http://127.0.0.1:4173/index.html';
 
-test('read-only page renders spec, status chips, aggregates, markers, questions', async ({ page }) => {
+test('read-only page renders spec, status chips, aggregates, markers, questions', async ({
+  page,
+}) => {
   await page.goto(URL);
   await expect(page.locator('h1')).toHaveText('tbgwaf');
   await expect(page.locator('details.block').first()).toBeVisible();
@@ -31,9 +33,17 @@ test('search filters', async ({ page }) => {
 
 test('evidence links are pinned to commits and allowlisted; media shown', async ({ page }) => {
   await page.goto(`${URL}#shoot.burst.cap`);
-  const links = page.locator('#shoot\\.burst\\.cap ~ .detail a, details.leafdet:has(#shoot\\.burst\\.cap) .detail a');
+  const links = page.locator(
+    '#shoot\\.burst\\.cap ~ .detail a, details.leafdet:has(#shoot\\.burst\\.cap) .detail a',
+  );
   const hrefs = await links.evaluateAll((a) => a.map((x) => (x as HTMLAnchorElement).href));
-  expect(hrefs.some((h) => /github\.com\/TheDeepestSpace\/tbgwaf\/blob\/9ff2e3a0+aa\/src\/game\/Weapon\.h#L60-L75/.test(h))).toBe(true);
+  expect(
+    hrefs.some((h) =>
+      /github\.com\/TheDeepestSpace\/tbgwaf\/blob\/9ff2e3a0+aa\/src\/game\/Weapon\.h#L60-L75/.test(
+        h,
+      ),
+    ),
+  ).toBe(true);
   expect(hrefs.some((h) => h.endsWith('/pull/138'))).toBe(true);
   await page.goto(`${URL}#shoot.burst.bar`);
   await page.locator('img.thumb').click();
@@ -44,12 +54,21 @@ test('evidence links are pinned to commits and allowlisted; media shown', async 
 
 test('has an Edit link to the server and never asks for a token', async ({ page }) => {
   await page.goto(URL);
-  await expect(page.getByRole('link', { name: 'Edit' })).toHaveAttribute('href', 'https://specage.fly.dev/r/TheDeepestSpace/tbgwaf');
+  await expect(page.getByRole('link', { name: 'Edit' })).toHaveAttribute(
+    'href',
+    'https://specage.fly.dev/r/TheDeepestSpace/tbgwaf',
+  );
   await expect(page.locator('input[type=password]')).toHaveCount(0);
 });
 
 test('works without localStorage', async ({ page }) => {
-  await page.addInitScript(() => { Object.defineProperty(window, 'localStorage', { get() { throw new Error('denied'); } }); });
+  await page.addInitScript(() => {
+    Object.defineProperty(window, 'localStorage', {
+      get() {
+        throw new Error('denied');
+      },
+    });
+  });
   await page.goto(URL);
   await expect(page.locator('h1')).toHaveText('tbgwaf');
   await page.locator('details.block > summary').first().click();

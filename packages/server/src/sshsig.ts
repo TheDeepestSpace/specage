@@ -39,7 +39,8 @@ const lp = (b: Buffer | string) => {
 /** Extract the raw 32-byte Ed25519 key from an OpenSSH public key line. */
 export function parseOpenSshEd25519(line: string): Buffer {
   const parts = line.trim().split(/\s+/);
-  if (parts[0] !== 'ssh-ed25519' || !parts[1]) throw new SshsigError('OWNER_PUBKEY must be an ssh-ed25519 key');
+  if (parts[0] !== 'ssh-ed25519' || !parts[1])
+    throw new SshsigError('OWNER_PUBKEY must be an ssh-ed25519 key');
   const r = new Reader(Buffer.from(parts[1], 'base64'));
   if (r.str().toString() !== 'ssh-ed25519') throw new SshsigError('bad key blob');
   const k = r.str();
@@ -57,7 +58,12 @@ function armorBody(armored: string): Buffer {
  * Verify an `ssh-keygen -Y sign` signature (Ed25519 only, sha512 only) over `message`
  * in `namespace`, made by `ownerPubkey` (OpenSSH format). Throws SshsigError on any mismatch.
  */
-export function verifySshsig(opts: { armored: string; message: Buffer | string; namespace: string; ownerPubkey: string }): void {
+export function verifySshsig(opts: {
+  armored: string;
+  message: Buffer | string;
+  namespace: string;
+  ownerPubkey: string;
+}): void {
   const owner = parseOpenSshEd25519(opts.ownerPubkey);
   const r = new Reader(armorBody(opts.armored));
   if (r.raw(6).toString() !== 'SSHSIG') throw new SshsigError('bad magic');
@@ -84,7 +90,10 @@ export function verifySshsig(opts: { armored: string; message: Buffer | string; 
     lp(hashAlg),
     lp(createHash('sha512').update(msg).digest()),
   ]);
-  const pk = createPublicKey({ key: { kty: 'OKP', crv: 'Ed25519', x: key.toString('base64url') }, format: 'jwk' });
+  const pk = createPublicKey({
+    key: { kty: 'OKP', crv: 'Ed25519', x: key.toString('base64url') },
+    format: 'jwk',
+  });
   if (sig.length !== 64 || !verify(null, signed, pk, sig)) throw new SshsigError('bad signature');
 }
 

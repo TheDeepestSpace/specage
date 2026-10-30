@@ -25,13 +25,32 @@ describe('seal', () => {
 describe('SSHSIG (real ssh-keygen signatures)', () => {
   const k = sshKey();
   const ch = (over: Partial<{ host: string; expires: string }> = {}) =>
-    challengeText({ purpose: 'specage-signup', host: 'specage.test', nonce: 'a'.repeat(64), expires: new Date(Date.now() + 1e5).toISOString(), ...over });
+    challengeText({
+      purpose: 'specage-signup',
+      host: 'specage.test',
+      nonce: 'a'.repeat(64),
+      expires: new Date(Date.now() + 1e5).toISOString(),
+      ...over,
+    });
   const ns = signupNamespace('specage.test');
-  const ok = (armored: string, message: string, namespace = ns, pub = k.pub) => verifySshsig({ armored, message, namespace, ownerPubkey: pub });
-  it('accepts a valid signature', () => { const m = ch(); ok(k.sign(m, ns), m); });
-  it('rejects a tampered message', () => { const m = ch(); expect(() => ok(k.sign(m, ns), m + 'x')).toThrow(SshsigError); });
-  it('rejects a wrong namespace', () => { const m = ch(); expect(() => ok(k.sign(m, 'other@specage.test'), m)).toThrow(/namespace/); });
-  it('rejects another key', () => { const m = ch(); expect(() => ok(k.sign(m, ns), m, ns, sshKey().pub)).toThrow(/different key/); });
+  const ok = (armored: string, message: string, namespace = ns, pub = k.pub) =>
+    verifySshsig({ armored, message, namespace, ownerPubkey: pub });
+  it('accepts a valid signature', () => {
+    const m = ch();
+    ok(k.sign(m, ns), m);
+  });
+  it('rejects a tampered message', () => {
+    const m = ch();
+    expect(() => ok(k.sign(m, ns), m + 'x')).toThrow(SshsigError);
+  });
+  it('rejects a wrong namespace', () => {
+    const m = ch();
+    expect(() => ok(k.sign(m, 'other@specage.test'), m)).toThrow(/namespace/);
+  });
+  it('rejects another key', () => {
+    const m = ch();
+    expect(() => ok(k.sign(m, ns), m, ns, sshKey().pub)).toThrow(/different key/);
+  });
   it('rejects garbage', () => expect(() => ok('nope', ch())).toThrow(SshsigError));
 });
 
@@ -40,31 +59,55 @@ describe('signup and passkeys', () => {
     const h = harness();
     const a = auth();
     expect((await h.signup(a)).status).toBe(200);
-    expect((await h.req('GET', '/signup', undefined, { accept: 'application/json' })).status).toBe(404);
+    expect((await h.req('GET', '/signup', undefined, { accept: 'application/json' })).status).toBe(
+      404,
+    );
     expect((await h.req('POST', '/auth/signup/verify', { signature: 'x' })).status).toBe(404);
     expect((await h.req('GET', '/api/me')).status).toBe(200);
   });
   it('rejects a signature from a different key', async () => {
     const h = harness();
-    const ch = (await (await h.req('GET', '/signup', undefined, { accept: 'application/json' })).json()) as any;
-    const r = await h.req('POST', '/auth/signup/verify', { signature: sshKey().sign(ch.challenge, ch.namespace) });
+    const ch = (await (
+      await h.req('GET', '/signup', undefined, { accept: 'application/json' })
+    ).json()) as any;
+    const r = await h.req('POST', '/auth/signup/verify', {
+      signature: sshKey().sign(ch.challenge, ch.namespace),
+    });
     expect(r.status).toBe(400);
     expect((await h.req('POST', '/auth/register/options', {})).status).toBe(403);
   });
   it('rejects a tampered challenge, wrong namespace and an expired challenge', async () => {
     let t = Date.now();
     const h = harness({ now: () => t });
-    const ch = (await (await h.req('GET', '/signup', undefined, { accept: 'application/json' })).json()) as any;
-    expect((await h.req('POST', '/auth/signup/verify', { signature: h.key.sign(ch.challenge + ' ', ch.namespace) })).status).toBe(400);
-    expect((await h.req('POST', '/auth/signup/verify', { signature: h.key.sign(ch.challenge, 'x@specage.test') })).status).toBe(400);
+    const ch = (await (
+      await h.req('GET', '/signup', undefined, { accept: 'application/json' })
+    ).json()) as any;
+    expect(
+      (
+        await h.req('POST', '/auth/signup/verify', {
+          signature: h.key.sign(ch.challenge + ' ', ch.namespace),
+        })
+      ).status,
+    ).toBe(400);
+    expect(
+      (
+        await h.req('POST', '/auth/signup/verify', {
+          signature: h.key.sign(ch.challenge, 'x@specage.test'),
+        })
+      ).status,
+    ).toBe(400);
     t += 6 * 60_000;
-    const r = await h.req('POST', '/auth/signup/verify', { signature: h.key.sign(ch.challenge, ch.namespace) });
+    const r = await h.req('POST', '/auth/signup/verify', {
+      signature: h.key.sign(ch.challenge, ch.namespace),
+    });
     expect(r.status).toBe(400);
     expect(((await r.json()) as any).error).toMatch(/expired/);
   });
   it('rejects a replayed nonce', async () => {
     const h = harness();
-    const ch = (await (await h.req('GET', '/signup', undefined, { accept: 'application/json' })).json()) as any;
+    const ch = (await (
+      await h.req('GET', '/signup', undefined, { accept: 'application/json' })
+    ).json()) as any;
     const sig = h.key.sign(ch.challenge, ch.namespace);
     const cookie = h.jar.get('specage_signup')!;
     expect((await h.req('POST', '/auth/signup/verify', { signature: sig })).status).toBe(200);
@@ -88,7 +131,9 @@ describe('signup and passkeys', () => {
     expect((await h.req('GET', '/api/me')).status).toBe(200);
     const other = auth();
     const opts = await (await h.req('POST', '/auth/login/options', {})).json();
-    expect((await h.req('POST', '/auth/login/verify', { response: other.get(opts) })).status).toBe(401);
+    expect((await h.req('POST', '/auth/login/verify', { response: other.get(opts) })).status).toBe(
+      401,
+    );
   });
   it('rejects a signature-counter regression', async () => {
     const h = harness();
@@ -132,11 +177,17 @@ describe('CSRF', () => {
     const h = harness();
     await h.signup(auth());
     const body = { content: SPEC0, base_sha: h.github.head().sha };
-    expect((await h.req('PUT', '/api/r/o/r/spec', body, { origin: 'https://evil.test' })).status).toBe(403);
+    expect(
+      (await h.req('PUT', '/api/r/o/r/spec', body, { origin: 'https://evil.test' })).status,
+    ).toBe(403);
     expect((await h.req('PUT', '/api/r/o/r/spec', body, { 'x-specage': '' })).status).toBe(403);
-    expect((await h.req('PUT', '/api/r/o/r/spec', body, { 'x-csrf-token': 'nope' })).status).toBe(403);
+    expect((await h.req('PUT', '/api/r/o/r/spec', body, { 'x-csrf-token': 'nope' })).status).toBe(
+      403,
+    );
     expect((await h.req('PUT', '/api/r/o/r/spec', body)).status).toBe(200);
-    expect((await h.req('POST', '/auth/login/options', {}, { origin: 'https://evil.test' })).status).toBe(403);
+    expect(
+      (await h.req('POST', '/auth/login/options', {}, { origin: 'https://evil.test' })).status,
+    ).toBe(403);
   });
   it('sets hardening headers and secure cookies', async () => {
     const h = harness();
@@ -148,14 +199,21 @@ describe('CSRF', () => {
     expect(r.headers.get('referrer-policy')).toBe('no-referrer');
     const s = await h.req('GET', '/signup', undefined, { accept: 'application/json' });
     const c = s.headers.getSetCookie()[0];
-    expect(c).toMatch(/HttpOnly/i); expect(c).toMatch(/Secure/i); expect(c).toMatch(/SameSite=Strict/i);
+    expect(c).toMatch(/HttpOnly/i);
+    expect(c).toMatch(/Secure/i);
+    expect(c).toMatch(/SameSite=Strict/i);
   });
 });
 
 describe('API', () => {
   it('requires a session', async () => {
     const h = harness();
-    for (const [m, p] of [['GET', '/api/me'], ['GET', '/api/repos'], ['GET', '/api/r/o/r/spec'], ['POST', '/api/r/o/r/dispatch']])
+    for (const [m, p] of [
+      ['GET', '/api/me'],
+      ['GET', '/api/repos'],
+      ['GET', '/api/r/o/r/spec'],
+      ['POST', '/api/r/o/r/dispatch'],
+    ])
       expect((await h.req(m, p, m === 'POST' ? {} : undefined)).status).toBe(401);
   });
   it('reads spec and state; refuses repos without the App', async () => {
@@ -175,11 +233,19 @@ describe('API', () => {
     const bad = await h.req('PUT', '/api/r/o/r/spec', { content: 'no id here;', base_sha: base });
     expect(bad.status).toBe(422);
     expect(((await bad.json()) as any).diagnostics[0].code).toBe('E002');
-    expect((await h.req('PUT', '/api/r/o/r/spec', { content: 'x @old.id;', base_sha: base })).status).toBe(422); // E004 via trace
-    const ok = await h.req('PUT', '/api/r/o/r/spec', { content: SPEC0 + 'New thing @shoot.new;\n', base_sha: base });
+    expect(
+      (await h.req('PUT', '/api/r/o/r/spec', { content: 'x @old.id;', base_sha: base })).status,
+    ).toBe(422); // E004 via trace
+    const ok = await h.req('PUT', '/api/r/o/r/spec', {
+      content: SPEC0 + 'New thing @shoot.new;\n',
+      base_sha: base,
+    });
     expect(ok.status).toBe(200);
     expect(h.github.lastMessage).toBe('spec: shoot.new');
-    const stale = await h.req('PUT', '/api/r/o/r/spec', { content: SPEC0 + 'Other @shoot.other;\n', base_sha: base });
+    const stale = await h.req('PUT', '/api/r/o/r/spec', {
+      content: SPEC0 + 'Other @shoot.other;\n',
+      base_sha: base,
+    });
     expect(stale.status).toBe(409);
     expect(((await stale.json()) as any).content).toContain('shoot.new');
   });
@@ -191,13 +257,19 @@ describe('API', () => {
     const pv = (await (await h.req('GET', '/api/r/o/r/dispatch/preview')).json()) as any;
     expect(pv.cursor).toBeNull();
     expect(pv.diff.entries.map((e: any) => e.kind)).toEqual(['added', 'added']);
-    expect((await h.req('POST', '/api/r/o/r/dispatch', { expected_head: 'f'.repeat(40) })).status).toBe(409);
+    expect(
+      (await h.req('POST', '/api/r/o/r/dispatch', { expected_head: 'f'.repeat(40) })).status,
+    ).toBe(409);
     const d = await h.req('POST', '/api/r/o/r/dispatch', { expected_head: pv.head_sha });
     expect(d.status).toBe(200);
     expect(((await d.json()) as any).tag).toBe('dispatch/2026-10-30T02-11Z');
-    expect((await h.req('POST', '/api/r/o/r/dispatch', { expected_head: pv.head_sha })).status).toBe(409); // same minute
+    expect(
+      (await h.req('POST', '/api/r/o/r/dispatch', { expected_head: pv.head_sha })).status,
+    ).toBe(409); // same minute
     t += 6 * 60_000; // step-up stale
-    expect((await h.req('POST', '/api/r/o/r/dispatch', { expected_head: pv.head_sha })).status).toBe(403);
+    expect(
+      (await h.req('POST', '/api/r/o/r/dispatch', { expected_head: pv.head_sha })).status,
+    ).toBe(403);
     await h.login(a);
     const pv2 = (await (await h.req('GET', '/api/r/o/r/dispatch/preview')).json()) as any;
     expect(pv2.cursor).toBe('dispatch/2026-10-30T02-11Z');
@@ -213,7 +285,10 @@ describe('API', () => {
     const h = harness();
     await h.signup(auth());
     let last = 200;
-    for (let i = 0; i < 61; i++) last = (await h.req('PUT', '/api/r/o/r/spec', { content: SPEC0, base_sha: h.github.head().sha })).status;
+    for (let i = 0; i < 61; i++)
+      last = (
+        await h.req('PUT', '/api/r/o/r/spec', { content: SPEC0, base_sha: h.github.head().sha })
+      ).status;
     expect(last).toBe(429);
   });
   it('never logs or returns secrets from the audit table', async () => {
@@ -231,11 +306,21 @@ describe('GitHub access', () => {
     const fetch = async (url: string, init: RequestInit = {}) => {
       const u = new URL(url);
       const path = u.pathname + u.search;
-      log.push({ method: init.method ?? 'GET', path, auth: String((init.headers as any).authorization), body: init.body ? JSON.parse(String(init.body)) : undefined });
+      log.push({
+        method: init.method ?? 'GET',
+        path,
+        auth: String((init.headers as any).authorization),
+        body: init.body ? JSON.parse(String(init.body)) : undefined,
+      });
       const j = (o: unknown, status = 200) => new Response(JSON.stringify(o), { status });
       if (u.pathname.endsWith('/installation')) return j({ id: 42 });
-      if (u.pathname === '/app/installations/42/access_tokens') return j({ token: 'ghs_SECRET_TOKEN', expires_at: new Date(Date.now() + 3600e3).toISOString() });
-      if (u.pathname.includes('/contents/')) return j({ content: Buffer.from('hello').toString('base64') });
+      if (u.pathname === '/app/installations/42/access_tokens')
+        return j({
+          token: 'ghs_SECRET_TOKEN',
+          expires_at: new Date(Date.now() + 3600e3).toISOString(),
+        });
+      if (u.pathname.includes('/contents/'))
+        return j({ content: Buffer.from('hello').toString('base64') });
       if (u.pathname.endsWith('/git/ref/heads/spec')) return j({ object: { sha: 'a'.repeat(40) } });
       if (u.pathname.includes('/git/commits/')) return j({ tree: { sha: 't' } });
       if (u.pathname.endsWith('/git/blobs')) return j({ sha: 'b' });
@@ -243,7 +328,8 @@ describe('GitHub access', () => {
       if (u.pathname.endsWith('/git/commits')) return j({ sha: 'c'.repeat(40) });
       if (u.pathname.endsWith('/git/refs/heads/spec')) return j({});
       if (u.pathname.endsWith('/git/refs')) return j({});
-      if (u.pathname.includes('matching-refs')) return j([{ ref: 'refs/tags/dispatch/2026-01-01T00-00Z' }]);
+      if (u.pathname.includes('matching-refs'))
+        return j([{ ref: 'refs/tags/dispatch/2026-01-01T00-00Z' }]);
       return j({ message: 'unexpected' }, 500);
     };
     return { log, gh: new RealGitHub({ appId: '1', privateKey: pem, fetch: fetch as any }) };
@@ -262,19 +348,42 @@ describe('GitHub access', () => {
     await gh.getFile('o', 'r', 'dir/a.specage', 'dispatch/2026-01-01T00-00Z');
     await gh.getRef('o', 'r', 'heads/spec');
     await gh.listDispatchTags('o', 'r');
-    await gh.commitSpec('o', 'r', { path: 'a.specage', content: 'x', message: 'm', parentSha: 'a'.repeat(40), author: { name: 'n', email: 'e' } });
+    await gh.commitSpec('o', 'r', {
+      path: 'a.specage',
+      content: 'x',
+      message: 'm',
+      parentSha: 'a'.repeat(40),
+      author: { name: 'n', email: 'e' },
+    });
     await gh.createTag('o', 'r', 'dispatch/x', 'a'.repeat(40));
     expect(log.length).toBeGreaterThan(8);
-    for (const l of log) expect(ALLOWED.some((r) => r.method === l.method && r.re.test(l.path)), `${l.method} ${l.path}`).toBe(true);
+    for (const l of log)
+      expect(
+        ALLOWED.some((r) => r.method === l.method && r.re.test(l.path)),
+        `${l.method} ${l.path}`,
+      ).toBe(true);
     const ref = log.find((l) => l.method === 'PATCH')!;
     expect(ref.body.force).toBe(false);
   });
   it('the request wrapper refuses anything off the allowlist', async () => {
     const { gh } = mock();
-    await expect((gh as any).req('DELETE', '/repos/o/r', { kind: 'jwt' })).rejects.toThrow(/not allowlisted/);
-    await expect((gh as any).req('PATCH', '/repos/o/r/git/refs/heads/main', { kind: 'install', token: 't' }, {})).rejects.toThrow(/not allowlisted/);
-    await expect((gh as any).req('POST', '/repos/o/r/issues', { kind: 'install', token: 't' }, {})).rejects.toThrow(/not allowlisted/);
-    await expect((gh as any).req('PUT', '/repos/o/r/contents/x', { kind: 'install', token: 't' }, {})).rejects.toThrow(/not allowlisted/);
+    await expect((gh as any).req('DELETE', '/repos/o/r', { kind: 'jwt' })).rejects.toThrow(
+      /not allowlisted/,
+    );
+    await expect(
+      (gh as any).req(
+        'PATCH',
+        '/repos/o/r/git/refs/heads/main',
+        { kind: 'install', token: 't' },
+        {},
+      ),
+    ).rejects.toThrow(/not allowlisted/);
+    await expect(
+      (gh as any).req('POST', '/repos/o/r/issues', { kind: 'install', token: 't' }, {}),
+    ).rejects.toThrow(/not allowlisted/);
+    await expect(
+      (gh as any).req('PUT', '/repos/o/r/contents/x', { kind: 'install', token: 't' }, {}),
+    ).rejects.toThrow(/not allowlisted/);
   });
   it('installation tokens never reach the client', async () => {
     const { gh } = mock();
@@ -287,8 +396,20 @@ describe('GitHub access', () => {
     const { createApp } = await import('../src/app.js');
     const app = createApp({ env: h.env, db: h.db, github: gh });
     const jar = [...h.jar].map(([k, v]) => `${k}=${v}`).join('; ');
-    const hdr = { origin: ORIGIN, 'x-specage': '1', 'x-csrf-token': h.csrf, cookie: jar, 'content-type': 'application/json' };
-    for (const [m, p] of [['GET', '/api/r/o/r/spec'], ['GET', '/api/r/o/r/state'], ['GET', '/api/r/o/r/dispatch/preview'], ['GET', '/api/me'], ['GET', '/api/credentials']]) {
+    const hdr = {
+      origin: ORIGIN,
+      'x-specage': '1',
+      'x-csrf-token': h.csrf,
+      cookie: jar,
+      'content-type': 'application/json',
+    };
+    for (const [m, p] of [
+      ['GET', '/api/r/o/r/spec'],
+      ['GET', '/api/r/o/r/state'],
+      ['GET', '/api/r/o/r/dispatch/preview'],
+      ['GET', '/api/me'],
+      ['GET', '/api/credentials'],
+    ]) {
       const r = await app.request(p, { method: m, headers: hdr });
       bodies.push(await r.text(), JSON.stringify([...r.headers]));
     }
@@ -297,10 +418,18 @@ describe('GitHub access', () => {
 });
 
 describe('env', () => {
-  const base = { SESSION_SECRET: Buffer.alloc(32, 1).toString('base64'), OWNER_PUBKEY: 'x', GITHUB_APP_ID: '1', GITHUB_APP_PRIVATE_KEY: 'k', PUBLIC_URL: 'https://x.fly.dev' };
+  const base = {
+    SESSION_SECRET: Buffer.alloc(32, 1).toString('base64'),
+    OWNER_PUBKEY: 'x',
+    GITHUB_APP_ID: '1',
+    GITHUB_APP_PRIVATE_KEY: 'k',
+    PUBLIC_URL: 'https://x.fly.dev',
+  };
   it('refuses DEV_GITHUB_TOKEN outside development', () => {
     expect(() => loadEnv({ ...base, DEV_GITHUB_TOKEN: 't' })).toThrow(/NODE_ENV=development/);
-    expect(loadEnv({ ...base, NODE_ENV: 'development', DEV_GITHUB_TOKEN: 't' }).devGithubToken).toBe('t');
+    expect(
+      loadEnv({ ...base, NODE_ENV: 'development', DEV_GITHUB_TOKEN: 't' }).devGithubToken,
+    ).toBe('t');
   });
   it('requires https and a 32 byte secret in production', () => {
     expect(() => loadEnv({ ...base, PUBLIC_URL: 'http://x.fly.dev' })).toThrow(/https/);

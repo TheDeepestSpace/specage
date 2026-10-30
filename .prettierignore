@@ -4,3 +4,7 @@ package-lock.json
 fixtures
 SPECAGE-HANDOFF.md
 *.md
+templates
+packages/action
+test-results
+.github

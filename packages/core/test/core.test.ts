@@ -2,7 +2,10 @@ import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { parse, lint, diff, flatten, normalize, sha12 } from '../src/index.js';
 
-const fixture = readFileSync(new URL('../../../fixtures/tbgwaf/tbgwaf.specage', import.meta.url), 'utf8');
+const fixture = readFileSync(
+  new URL('../../../fixtures/tbgwaf/tbgwaf.specage', import.meta.url),
+  'utf8',
+);
 const codes = (src: string, state?: any) => lint(parse(src), state).map((d) => d.code);
 
 describe('parse', () => {
@@ -56,7 +59,11 @@ describe('lint', () => {
   it('W101', () => expect(codes('a @p { b @q; };')).toContain('W101'));
   it('W102', () => expect(codes(`${'a'.repeat(300)} @x;`)).toContain('W102'));
   it('W103', () => {
-    for (const t of ['see src/game/Weapon.h @x;', 'see https://x.io @x;', String.raw`like \#123 here @x;`])
+    for (const t of [
+      'see src/game/Weapon.h @x;',
+      'see https://x.io @x;',
+      String.raw`like \#123 here @x;`,
+    ])
       expect(codes(t)).toContain('W103');
     expect(codes('this and/or that @x;')).not.toContain('W103');
   });
@@ -72,7 +79,10 @@ const d = (a: string, b: string) => diff(parse(a), parse(b));
 describe('diff', () => {
   it('self diff empty', () => expect(diff(parse(fixture), parse(fixture)).entries).toEqual([]));
   it('reflow is empty', () => {
-    const reflowed = fixture.replace(/(^|\s)#.*$/gm, '').replace(/ (?=[a-z])/g, '\n   ').replace(/(?<!\\);/g, ' ;');
+    const reflowed = fixture
+      .replace(/(^|\s)#.*$/gm, '')
+      .replace(/ (?=[a-z])/g, '\n   ')
+      .replace(/(?<!\\);/g, ' ;');
     expect(diff(parse(fixture), parse(reflowed)).entries).toEqual([]);
   });
   it('added/removed/changed', () => {
@@ -86,7 +96,12 @@ describe('diff', () => {
   it('rename', () => {
     const r = d('t @a.b;', 't @a.c <- a.b;');
     expect(r.entries).toHaveLength(1);
-    expect(r.entries[0]).toMatchObject({ kind: 'renamed', from: 'a.b', id: 'a.c', text_changed: false });
+    expect(r.entries[0]).toMatchObject({
+      kind: 'renamed',
+      from: 'a.b',
+      id: 'a.c',
+      text_changed: false,
+    });
   });
   it('split', () => {
     const r = d('g @s.g;', 'g1 @s.f <- s.g; g2 @s.r <- s.g;');
@@ -120,12 +135,22 @@ describe('golden', () => {
   const spec = parse(fixture);
   const json = (f: string) => JSON.parse(readFileSync(new URL(f, dir), 'utf8'));
   it('hash.json', () =>
-    expect(Object.fromEntries(flatten(spec).map((n) => [n.id, { hash: n.hash, subtree_hash: n.subtreeHash }]))).toEqual(json('hash.json')));
+    expect(
+      Object.fromEntries(
+        flatten(spec).map((n) => [n.id, { hash: n.hash, subtree_hash: n.subtreeHash }]),
+      ),
+    ).toEqual(json('hash.json')));
   it('lint.json', () => expect(JSON.parse(JSON.stringify(lint(spec)))).toEqual(json('lint.json')));
   it('parse.json', () => {
     const strip = (n: any): any => ({
-      id: n.id, type: n.type, marker: n.marker, text: n.text, parent: n.parent, lineage: n.lineage,
-      line: n.line, children: n.children.map(strip),
+      id: n.id,
+      type: n.type,
+      marker: n.marker,
+      text: n.text,
+      parent: n.parent,
+      lineage: n.lineage,
+      line: n.line,
+      children: n.children.map(strip),
     });
     expect(JSON.parse(JSON.stringify(spec.roots.map(strip)))).toEqual(json('parse.json'));
   });
@@ -148,7 +173,14 @@ import { createHash } from 'node:crypto';
 import { sha256Hex } from '../src/hash.js';
 describe('sha256', () => {
   it('matches node:crypto', () => {
-    for (const s of ['', 'abc', 'x'.repeat(55), 'x'.repeat(56), 'x'.repeat(64), 'héllo wörld ✓'.repeat(20)])
+    for (const s of [
+      '',
+      'abc',
+      'x'.repeat(55),
+      'x'.repeat(56),
+      'x'.repeat(64),
+      'héllo wörld ✓'.repeat(20),
+    ])
       expect(sha256Hex(s)).toBe(createHash('sha256').update(s, 'utf8').digest('hex'));
   });
 });
@@ -157,8 +189,15 @@ import { parseYaml, parseState } from '../src/index.js';
 describe('yaml hashes', () => {
   it('keeps numeric-looking hashes as strings', () => {
     for (const h of ['000000000000', '123456789012', '12e456789012', '0e1234567890'])
-      expect((parseYaml(`nodes:\n  a: {spec_hash: ${h}, status: planned}`) as any).nodes.a.spec_hash).toBe(h);
-    const { issues } = parseState({ trace: parseYaml('nodes:\n  a: {spec_hash: 123456789012, status: planned}'), work: parseYaml('items:\n - {id: w, state: filed, claims: {a: {hash: 000000000001, status: done}}}') });
+      expect(
+        (parseYaml(`nodes:\n  a: {spec_hash: ${h}, status: planned}`) as any).nodes.a.spec_hash,
+      ).toBe(h);
+    const { issues } = parseState({
+      trace: parseYaml('nodes:\n  a: {spec_hash: 123456789012, status: planned}'),
+      work: parseYaml(
+        'items:\n - {id: w, state: filed, claims: {a: {hash: 000000000001, status: done}}}',
+      ),
+    });
     expect(issues).toEqual([]);
   });
 });

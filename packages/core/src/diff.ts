@@ -15,15 +15,28 @@ export type DiffEntry =
   | { kind: 'moved'; id: string; old: Side; new: Side }
   | { kind: 'renamed'; from: string; id: string; old: Side; new: Side; text_changed: boolean }
   | { kind: 'split'; from: string; ids: string[]; old: Side; new: Side[] }
-  | { kind: 'merged'; from: string[]; id: string; old: Side[]; new: Side; }
-  | { kind: 'suspected_rename'; from: string; id: string; similarity: number; old: Side; new: Side };
+  | { kind: 'merged'; from: string[]; id: string; old: Side[]; new: Side }
+  | {
+      kind: 'suspected_rename';
+      from: string;
+      id: string;
+      similarity: number;
+      old: Side;
+      new: Side;
+    };
 
 export interface SpecDiff {
   entries: DiffEntry[];
   subtree_changed: string[];
 }
 
-const side = (n: SpecNode): Side => ({ id: n.id, hash: n.hash, text: n.text, parent: n.parent, line: n.line });
+const side = (n: SpecNode): Side => ({
+  id: n.id,
+  hash: n.hash,
+  text: n.text,
+  parent: n.parent,
+  line: n.line,
+});
 
 export function similarity(a: string, b: string): number {
   if (a === b) return 1;
@@ -49,26 +62,50 @@ export function diff(oldSpec: Spec, newSpec: Spec): SpecDiff {
 
   // lineage: group new nodes by the old ids they reference (only retired old ids)
   const bySource = new Map<string, SpecNode[]>();
-  const lineageNodes = flatten(newSpec).filter((n) => n.lineage.some((o) => oldIdx.has(o) && !newIdx.has(o)));
+  const lineageNodes = flatten(newSpec).filter((n) =>
+    n.lineage.some((o) => oldIdx.has(o) && !newIdx.has(o)),
+  );
   for (const n of lineageNodes)
-    for (const o of n.lineage) if (oldIdx.has(o) && !newIdx.has(o)) bySource.set(o, [...(bySource.get(o) ?? []), n]);
+    for (const o of n.lineage)
+      if (oldIdx.has(o) && !newIdx.has(o)) bySource.set(o, [...(bySource.get(o) ?? []), n]);
   const done = new Set<SpecNode>();
   for (const n of lineageNodes) {
     if (done.has(n)) continue;
     const olds = n.lineage.filter((o) => oldIdx.has(o) && !newIdx.has(o));
     if (olds.length > 1) {
-      entries.push({ kind: 'merged', from: olds, id: n.id, old: olds.map((o) => side(oldIdx.get(o)!)), new: side(n) });
+      entries.push({
+        kind: 'merged',
+        from: olds,
+        id: n.id,
+        old: olds.map((o) => side(oldIdx.get(o)!)),
+        new: side(n),
+      });
       olds.forEach((o) => consumedOld.add(o));
       done.add(n);
     } else {
       const o = olds[0];
-      const targets = bySource.get(o)!.filter((t) => t.lineage.filter((x) => oldIdx.has(x) && !newIdx.has(x)).length === 1);
+      const targets = bySource
+        .get(o)!
+        .filter((t) => t.lineage.filter((x) => oldIdx.has(x) && !newIdx.has(x)).length === 1);
       if (targets.length > 1) {
-        entries.push({ kind: 'split', from: o, ids: targets.map((t) => t.id), old: side(oldIdx.get(o)!), new: targets.map(side) });
+        entries.push({
+          kind: 'split',
+          from: o,
+          ids: targets.map((t) => t.id),
+          old: side(oldIdx.get(o)!),
+          new: targets.map(side),
+        });
         targets.forEach((t) => done.add(t));
       } else {
         const on = oldIdx.get(o)!;
-        entries.push({ kind: 'renamed', from: o, id: n.id, old: side(on), new: side(n), text_changed: on.hash !== n.hash });
+        entries.push({
+          kind: 'renamed',
+          from: o,
+          id: n.id,
+          old: side(on),
+          new: side(n),
+          text_changed: on.hash !== n.hash,
+        });
         done.add(n);
       }
       consumedOld.add(o);
@@ -104,7 +141,14 @@ export function diff(oldSpec: Spec, newSpec: Spec): SpecDiff {
     if (usedO.has(p.o.id) || usedN.has(p.n.id)) continue;
     usedO.add(p.o.id);
     usedN.add(p.n.id);
-    entries.push({ kind: 'suspected_rename', from: p.o.id, id: p.n.id, similarity: Math.round(p.s * 100) / 100, old: side(p.o), new: side(p.n) });
+    entries.push({
+      kind: 'suspected_rename',
+      from: p.o.id,
+      id: p.n.id,
+      similarity: Math.round(p.s * 100) / 100,
+      old: side(p.o),
+      new: side(p.n),
+    });
   }
 
   // blocks whose subtree hash changed (by ID, following lineage)
@@ -113,7 +157,9 @@ export function diff(oldSpec: Spec, newSpec: Spec): SpecDiff {
   const subtree: string[] = [];
   for (const n of flatten(newSpec)) {
     if (n.type !== 'block') continue;
-    const o = oldIdx.get(n.id) ?? (lineageSrc.get(n.id)?.length === 1 ? oldIdx.get(lineageSrc.get(n.id)![0]) : undefined);
+    const o =
+      oldIdx.get(n.id) ??
+      (lineageSrc.get(n.id)?.length === 1 ? oldIdx.get(lineageSrc.get(n.id)![0]) : undefined);
     if (!o || o.subtreeHash !== n.subtreeHash) subtree.push(n.id);
   }
   return { entries, subtree_changed: subtree };
@@ -123,11 +169,16 @@ export function summarize(d: SpecDiff): string {
   if (!d.entries.length) return 'no changes';
   const lines = d.entries.map((e) => {
     switch (e.kind) {
-      case 'split': return `split      ${e.from} -> ${e.ids.join(', ')}`;
-      case 'merged': return `merged     ${e.from.join(', ')} -> ${e.id}`;
-      case 'renamed': return `renamed    ${e.from} -> ${e.id}${e.text_changed ? ' (text changed)' : ''}`;
-      case 'suspected_rename': return `suspected  ${e.from} -> ${e.id} (${e.similarity})`;
-      default: return `${e.kind.padEnd(10)} ${e.id}`;
+      case 'split':
+        return `split      ${e.from} -> ${e.ids.join(', ')}`;
+      case 'merged':
+        return `merged     ${e.from.join(', ')} -> ${e.id}`;
+      case 'renamed':
+        return `renamed    ${e.from} -> ${e.id}${e.text_changed ? ' (text changed)' : ''}`;
+      case 'suspected_rename':
+        return `suspected  ${e.from} -> ${e.id} (${e.similarity})`;
+      default:
+        return `${e.kind.padEnd(10)} ${e.id}`;
     }
   });
   return lines.join('\n');

@@ -2,7 +2,11 @@
   "name": "@specage/web",
   "version": "0.1.0",
   "type": "module",
-  "scripts": { "build": "vite build", "dev": "vite", "e2e": "playwright test" },
+  "scripts": {
+    "build": "vite build",
+    "dev": "vite",
+    "e2e": "playwright test"
+  },
   "dependencies": {
     "@specage/core": "*",
     "@codemirror/commands": "^6.7.0",
@@ -13,5 +17,8 @@
     "@codemirror/autocomplete": "^6.18.0",
     "@simplewebauthn/browser": "^11.0.0"
   },
-  "devDependencies": { "vite": "^5.4.0", "@playwright/test": "^1.48.0" }
+  "devDependencies": {
+    "vite": "^5.4.0",
+    "@playwright/test": "^1.48.0"
+  }
 }

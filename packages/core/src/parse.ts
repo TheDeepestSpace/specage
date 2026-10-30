@@ -146,7 +146,7 @@ class Parser {
     const raw = this.readText();
     const text = normalize(raw.text);
     let id: string | null = null;
-    let lineage: string[] = [];
+    const lineage: string[] = [];
     const idLine = this.line;
     const idCol = this.col;
     if (this.peek() === '@') {
@@ -209,7 +209,12 @@ class Parser {
     if (term === ';') {
       this.next();
       if (id === null) {
-        this.err('E002', text ? 'statement without an ID' : 'empty statement', raw.line, raw.column);
+        this.err(
+          'E002',
+          text ? 'statement without an ID' : 'empty statement',
+          raw.line,
+          raw.column,
+        );
         if (!text) return null;
       }
       const n = make('leaf');
@@ -246,7 +251,7 @@ export function computeSubtreeHashes(n: SpecNode): void {
 }
 
 export function parse(src: string): Spec {
-  const p = new Parser(src.replace(/^﻿/, ''));
+  const p = new Parser(src.replace(/^\uFEFF/, ''));
   const roots = p.parseFile();
   for (const r of roots) computeSubtreeHashes(r);
   return { roots, diagnostics: p.diags };

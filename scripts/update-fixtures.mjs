@@ -5,12 +5,23 @@ import { parse, lint, flatten } from '../packages/core/dist/index.js';
 const dir = new URL('../fixtures/tbgwaf/', import.meta.url);
 const spec = parse(readFileSync(new URL('tbgwaf.specage', dir), 'utf8'));
 const strip = (n) => ({
-  id: n.id, type: n.type, marker: n.marker, text: n.text, parent: n.parent, lineage: n.lineage,
-  line: n.line, children: n.children.map(strip),
+  id: n.id,
+  type: n.type,
+  marker: n.marker,
+  text: n.text,
+  parent: n.parent,
+  lineage: n.lineage,
+  line: n.line,
+  children: n.children.map(strip),
 });
 const w = (f, v) => writeFileSync(new URL(f, dir), JSON.stringify(v, null, 2) + '\n');
 w('parse.json', spec.roots.map(strip));
-w('hash.json', Object.fromEntries(flatten(spec).map((n) => [n.id, { hash: n.hash, subtree_hash: n.subtreeHash }])));
+w(
+  'hash.json',
+  Object.fromEntries(
+    flatten(spec).map((n) => [n.id, { hash: n.hash, subtree_hash: n.subtreeHash }]),
+  ),
+);
 w('lint.json', lint(spec));
 console.log('fixtures updated');
 
@@ -19,7 +30,9 @@ const h = Object.fromEntries(flatten(spec).map((n) => [n.id, n.hash]));
 const state = new URL('state/', dir);
 mkdirSync(new URL('dispatches/', state), { recursive: true });
 const C = '9ff2e3a0000000000000000000000000000000aa';
-writeFileSync(new URL('trace.yaml', state), `retired_ids: [shoot.lock.torso]
+writeFileSync(
+  new URL('trace.yaml', state),
+  `retired_ids: [shoot.lock.torso]
 consumed_lineage: []
 nodes:
   shoot.burst.cap:
@@ -48,8 +61,11 @@ nodes:
     status: implemented
     evidence:
       - {kind: video, ref: tests/proofs/pause.webm, commit: ${C}, tier: tested}
-`);
-writeFileSync(new URL('work.yaml', state), `items:
+`,
+);
+writeFileSync(
+  new URL('work.yaml', state),
+  `items:
   - id: w-0042
     issue: 251
     pr: 254
@@ -58,8 +74,11 @@ writeFileSync(new URL('work.yaml', state), `items:
     claims:
       shoot.burst.death: {hash: ${h['shoot.burst.death']}, status: pending}
       shoot.burst.cap: {hash: ${h['shoot.burst.cap']}, status: done}
-`);
-writeFileSync(new URL('questions.yaml', state), `- id: q-0007
+`,
+);
+writeFileSync(
+  new URL('questions.yaml', state),
+  `- id: q-0007
   node: round.duration
   node_hash: ${h['round.duration']}
   dispatch: dispatch/2026-10-30T02-11Z
@@ -68,13 +87,17 @@ writeFileSync(new URL('questions.yaml', state), `- id: q-0007
   options: ["spec is right (full 5 s)", "comment is right (early end)"]
   state: open
   answer: null
-`);
-writeFileSync(new URL('dispatches/dispatch-2026-10-30T02-11Z.md', state), `# dispatch/2026-10-30T02-11Z
+`,
+);
+writeFileSync(
+  new URL('dispatches/dispatch-2026-10-30T02-11Z.md', state),
+  `# dispatch/2026-10-30T02-11Z
 
 1 contradiction, 3 implemented, 1 planned.
 
 - round.duration: contradiction, question q-0007
 - shoot.burst.cap: implemented (tested), no issue
 - shoot.burst.death: planned, issue #251
-`);
+`,
+);
 console.log('sample state written');

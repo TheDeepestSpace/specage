@@ -21,7 +21,8 @@ export interface Env {
 
 export function loadEnv(e: NodeJS.ProcessEnv = process.env): Env {
   const dev = e.NODE_ENV === 'development';
-  if (e.DEV_GITHUB_TOKEN && !dev) throw new Error('DEV_GITHUB_TOKEN is refused unless NODE_ENV=development');
+  if (e.DEV_GITHUB_TOKEN && !dev)
+    throw new Error('DEV_GITHUB_TOKEN is refused unless NODE_ENV=development');
   const need = (k: string, v = e[k]): string => {
     if (!v) throw new Error(`missing env ${k}`);
     return v;
@@ -29,9 +30,16 @@ export function loadEnv(e: NodeJS.ProcessEnv = process.env): Env {
   const port = Number(e.PORT ?? 8080);
   const publicUrl = e.PUBLIC_URL ?? (dev ? `http://localhost:${port}` : need('PUBLIC_URL'));
   const url = new URL(publicUrl);
-  const secret = Buffer.from(need('SESSION_SECRET', e.SESSION_SECRET ?? (dev ? Buffer.alloc(32, 7).toString('base64') : undefined)), 'base64');
+  const secret = Buffer.from(
+    need(
+      'SESSION_SECRET',
+      e.SESSION_SECRET ?? (dev ? Buffer.alloc(32, 7).toString('base64') : undefined),
+    ),
+    'base64',
+  );
   if (secret.length !== 32) throw new Error('SESSION_SECRET must be 32 bytes, base64');
-  if (!dev && url.protocol !== 'https:') throw new Error('PUBLIC_URL must be https outside development');
+  if (!dev && url.protocol !== 'https:')
+    throw new Error('PUBLIC_URL must be https outside development');
   const here = dirname(fileURLToPath(import.meta.url));
   return {
     nodeEnv: e.NODE_ENV ?? 'production',

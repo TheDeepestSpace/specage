@@ -16,8 +16,15 @@ function fileUrl(repo: string | undefined, e: Evidence, raw = false): string | n
 }
 
 function lightbox(src: string) {
-  const d = h('dialog', { class: 'lightbox' }, h('img', { src, alt: 'evidence' }), h('button', { onclick: () => d.close() }, 'Close'));
-  d.addEventListener('click', (ev) => { if (ev.target === d) d.close(); });
+  const d = h(
+    'dialog',
+    { class: 'lightbox' },
+    h('img', { src, alt: 'evidence' }),
+    h('button', { onclick: () => d.close() }, 'Close'),
+  );
+  d.addEventListener('click', (ev) => {
+    if (ev.target === d) d.close();
+  });
   d.addEventListener('close', () => d.remove());
   document.body.append(d);
   d.showModal();
@@ -25,14 +32,29 @@ function lightbox(src: string) {
 
 export function evidenceView(e: Evidence, repo?: string): HTMLElement {
   const label = `${e.kind}${e.tier ? ` · ${e.tier}` : ''}${e.inherited ? ' · inherited' : ''}`;
-  const li = h('li', { class: `evidence tier-${e.tier ?? 'none'}` }, h('span', { class: 'ev-kind' }, label), ' ');
+  const li = h(
+    'li',
+    { class: `evidence tier-${e.tier ?? 'none'}` },
+    h('span', { class: 'ev-kind' }, label),
+    ' ',
+  );
   const href = fileUrl(repo, e);
-  li.append(href ? h('a', { href, target: '_blank', rel: 'noopener noreferrer' }, e.ref) : h('span', {}, e.ref));
+  li.append(
+    href
+      ? h('a', { href, target: '_blank', rel: 'noopener noreferrer' }, e.ref)
+      : h('span', {}, e.ref),
+  );
   if (e.commit) li.append(h('code', { class: 'sha' }, e.commit.slice(0, 7)));
   const path = e.ref.split('#')[0];
   const raw = fileUrl(repo, e, true);
   if (raw && IMG.test(path)) {
-    const img = h('img', { class: 'thumb', src: raw, alt: path, loading: 'lazy', referrerpolicy: 'no-referrer' });
+    const img = h('img', {
+      class: 'thumb',
+      src: raw,
+      alt: path,
+      loading: 'lazy',
+      referrerpolicy: 'no-referrer',
+    });
     img.addEventListener('click', () => lightbox(raw));
     li.append(h('div', {}, img));
   } else if (raw && VID.test(path)) {

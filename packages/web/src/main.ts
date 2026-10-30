@@ -15,7 +15,9 @@ async function main() {
       renderViewer(root, await r.json());
       return;
     }
-  } catch { /* not a static page */ }
+  } catch {
+    /* not a static page */
+  }
   const m = /^\/r\/([\w.-]+\/[\w.-]+)$/.exec(path);
   if (m) return renderEditor(root, m[1]);
   if (path === '/login') return renderLogin(root);

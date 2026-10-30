@@ -9,7 +9,15 @@ test.describe.configure({ mode: 'serial' });
 function sign(challenge: string, ns: string): string {
   const d = mkdtempSync(join(tmpdir(), 'sig-'));
   writeFileSync(join(d, 'challenge.txt'), challenge);
-  execFileSync('ssh-keygen', ['-Y', 'sign', '-f', '/tmp/specage-e2e/k', '-n', ns, join(d, 'challenge.txt')]);
+  execFileSync('ssh-keygen', [
+    '-Y',
+    'sign',
+    '-f',
+    '/tmp/specage-e2e/k',
+    '-n',
+    ns,
+    join(d, 'challenge.txt'),
+  ]);
   return readFileSync(join(d, 'challenge.txt.sig'), 'utf8');
 }
 
@@ -17,7 +25,14 @@ async function virtualAuthenticator(page: Page) {
   const cdp = await page.context().newCDPSession(page);
   await cdp.send('WebAuthn.enable');
   await cdp.send('WebAuthn.addVirtualAuthenticator', {
-    options: { protocol: 'ctap2', transport: 'internal', hasResidentKey: true, hasUserVerification: true, isUserVerified: true, automaticPresenceSimulation: true },
+    options: {
+      protocol: 'ctap2',
+      transport: 'internal',
+      hasResidentKey: true,
+      hasUserVerification: true,
+      isUserVerified: true,
+      automaticPresenceSimulation: true,
+    },
   });
 }
 
@@ -39,7 +54,9 @@ test('sign-up needs the owner key; wrong signature rejected', async () => {
   const challenge = await page.locator('#challenge').innerText();
   const command = await page.locator('#command').innerText();
   const ns = /-n (\S+)/.exec(command)![1];
-  await page.locator('#signature').fill('-----BEGIN SSH SIGNATURE-----\nAAAA\n-----END SSH SIGNATURE-----');
+  await page
+    .locator('#signature')
+    .fill('-----BEGIN SSH SIGNATURE-----\nAAAA\n-----END SSH SIGNATURE-----');
   await page.locator('#verify').click();
   await expect(page.locator('.error')).toBeVisible();
   await page.locator('#signature').fill(sign(challenge, ns));
@@ -56,7 +73,10 @@ test('/signup disappears once a passkey exists', async () => {
 test('login with the passkey after logout', async () => {
   await page.evaluate(async () => {
     const me = await (await fetch('/api/me')).json();
-    await fetch('/auth/logout', { method: 'POST', headers: { 'x-specage': '1', 'x-csrf-token': me.csrf } });
+    await fetch('/auth/logout', {
+      method: 'POST',
+      headers: { 'x-specage': '1', 'x-csrf-token': me.csrf },
+    });
   });
   await page.goto('/login');
   await page.locator('#login').click();
@@ -104,7 +124,11 @@ test('lint is shown on the client and enforced by the server (422)', async () =>
   const status = await page.evaluate(async () => {
     const me = await (await fetch('/api/me')).json();
     const cur = await (await fetch('/api/r/o/r/spec')).json();
-    const r = await fetch('/api/r/o/r/spec', { method: 'PUT', headers: { 'x-specage': '1', 'x-csrf-token': me.csrf, 'content-type': 'application/json' }, body: JSON.stringify({ content: 'no id;', base_sha: cur.head_sha }) });
+    const r = await fetch('/api/r/o/r/spec', {
+      method: 'PUT',
+      headers: { 'x-specage': '1', 'x-csrf-token': me.csrf, 'content-type': 'application/json' },
+      body: JSON.stringify({ content: 'no id;', base_sha: cur.head_sha }),
+    });
     return r.status;
   });
   expect(status).toBe(422);
@@ -121,7 +145,14 @@ test('save, then a conflict with a 3-way view and re-apply', async () => {
   await page.evaluate(async () => {
     const me = await (await fetch('/api/me')).json();
     const cur = await (await fetch('/api/r/o/r/spec')).json();
-    await fetch('/api/r/o/r/spec', { method: 'PUT', headers: { 'x-specage': '1', 'x-csrf-token': me.csrf, 'content-type': 'application/json' }, body: JSON.stringify({ content: cur.content + 'Theirs @shoot.theirs;\n', base_sha: cur.head_sha }) });
+    await fetch('/api/r/o/r/spec', {
+      method: 'PUT',
+      headers: { 'x-specage': '1', 'x-csrf-token': me.csrf, 'content-type': 'application/json' },
+      body: JSON.stringify({
+        content: cur.content + 'Theirs @shoot.theirs;\n',
+        base_sha: cur.head_sha,
+      }),
+    });
   });
   await page.keyboard.type('Mine two @shoot.mine2;\n');
   await page.keyboard.press('Control+s');
@@ -137,7 +168,11 @@ test('dispatch: preview, step-up passkey assertion, then POST', async () => {
   await page.locator('#dispatch').click();
   await expect(page.locator('#preview li').first()).toBeVisible();
   const order: string[] = [];
-  page.on('request', (r) => { const u = new URL(r.url()).pathname; if (r.method() === 'POST' && (u === '/auth/login/verify' || u.endsWith('/dispatch'))) order.push(u); });
+  page.on('request', (r) => {
+    const u = new URL(r.url()).pathname;
+    if (r.method() === 'POST' && (u === '/auth/login/verify' || u.endsWith('/dispatch')))
+      order.push(u);
+  });
   await page.locator('#confirm-dispatch').click();
   await expect(page.locator('#status')).toContainText('Dispatched dispatch/');
   expect(order).toEqual(['/auth/login/verify', '/api/r/o/r/dispatch']);
@@ -145,13 +180,26 @@ test('dispatch: preview, step-up passkey assertion, then POST', async () => {
 
 test('dispatch is refused without a fresh step-up', async () => {
   // a session that has not asserted within 5 minutes is covered by the server unit tests; here: no session => 401
-  const r = await page.context().browser()!.newContext().then((c) => c.request.post('http://localhost:8788/api/r/o/r/dispatch', { data: {}, headers: { origin: 'http://localhost:8788', 'x-specage': '1' } }));
+  const r = await page
+    .context()
+    .browser()!
+    .newContext()
+    .then((c) =>
+      c.request.post('http://localhost:8788/api/r/o/r/dispatch', {
+        data: {},
+        headers: { origin: 'http://localhost:8788', 'x-specage': '1' },
+      }),
+    );
   expect(r.status()).toBe(401);
 });
 
 test('cross-origin writes are rejected (CSRF)', async () => {
   const s = await page.evaluate(async () => {
-    const r = await fetch('/api/r/o/r/dispatch', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' });
+    const r = await fetch('/api/r/o/r/dispatch', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: '{}',
+    });
     return r.status;
   });
   expect(s).toBe(403);

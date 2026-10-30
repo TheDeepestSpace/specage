@@ -1,12 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import YAML from 'yaml';
-import {
-  QuestionsSchema,
-  TraceSchema,
-  WorkSchema,
-  type State,
-} from './schemas.js';
+import { QuestionsSchema, TraceSchema, WorkSchema, type State } from './schemas.js';
 
 export interface StateIssue {
   file: string;
@@ -25,7 +20,13 @@ export function parseYaml(text: string): unknown {
     Pair(_, pair) {
       const k = pair.key as any;
       const v = pair.value as any;
-      if (HASH_KEYS.has(String(k?.value)) && YAML.isScalar(v) && typeof v.value === 'number' && v.source !== undefined) v.value = v.source;
+      if (
+        HASH_KEYS.has(String(k?.value)) &&
+        YAML.isScalar(v) &&
+        typeof v.value === 'number' &&
+        v.source !== undefined
+      )
+        v.value = v.source;
     },
   });
   return doc.toJS() ?? undefined;
@@ -40,10 +41,16 @@ export function parseState(raw: { trace?: unknown; work?: unknown; questions?: u
   issues: StateIssue[];
 } {
   const issues: StateIssue[] = [];
-  const run = <T>(file: string, schema: { safeParse(v: unknown): any }, v: unknown, dflt: unknown): T => {
+  const run = <T>(
+    file: string,
+    schema: { safeParse(v: unknown): any },
+    v: unknown,
+    dflt: unknown,
+  ): T => {
     const r = schema.safeParse(v ?? dflt);
     if (r.success) return r.data as T;
-    for (const i of r.error.issues) issues.push({ file, message: `${i.path.join('.')}: ${i.message}` });
+    for (const i of r.error.issues)
+      issues.push({ file, message: `${i.path.join('.')}: ${i.message}` });
     return schema.safeParse(dflt).data as T;
   };
   return {

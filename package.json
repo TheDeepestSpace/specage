@@ -1,6 +1,5 @@
 {
-  "name": "specage-monorepo",
-  "private": true,
+  "name": "specage",
   "type": "module",
   "workspaces": [
     "packages/*"
@@ -13,10 +12,10 @@
     "typecheck": "tsc -b packages/core packages/cli packages/server && tsc --noEmit -p packages/web",
     "lint": "eslint . && prettier --check .",
     "format": "prettier --write .",
-    "test": "vitest run",
+    "test": "tsc -b packages/core packages/cli packages/server && vitest run",
     "fixtures:update": "node scripts/update-fixtures.mjs",
     "dev": "NODE_ENV=development node packages/server/dist/index.js",
-    "prepare": "npm run build -w @specage/core -w @specage/cli || true",
+    "prepare": "npm run build",
     "dev:fake": "NODE_ENV=development OWNER_PUBKEY=\"$(cat ~/.ssh/id_ed25519.pub)\" node packages/server/dist/e2e-server.js",
     "e2e": "npm run build && playwright test -c packages/web/playwright.config.ts"
   },
@@ -29,5 +28,17 @@
     "typescript-eslint": "^8.0.0",
     "vitest": "^2.1.0",
     "@playwright/test": "^1.48.0"
-  }
+  },
+  "version": "0.1.0",
+  "bin": {
+    "specage": "packages/cli/dist/bin.js"
+  },
+  "files": [
+    "packages",
+    "templates",
+    "protocol",
+    "!packages/*/test",
+    "!packages/*/e2e",
+    "!packages/web/node_modules"
+  ]
 }

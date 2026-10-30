@@ -53,7 +53,8 @@ export function git(args: string[], cwd?: string): string {
 
 export function gh(args: string[], input?: string): string {
   const r = spawnSync('gh', args, { encoding: 'utf8', input });
-  if (r.status !== 0) throw new CliError(`gh ${args.join(' ')}: ${(r.stderr || r.error?.message || '').trim()}`, 3);
+  if (r.status !== 0)
+    throw new CliError(`gh ${args.join(' ')}: ${(r.stderr || r.error?.message || '').trim()}`, 3);
   return r.stdout;
 }
 
@@ -79,13 +80,18 @@ export function cursorTag(before?: string, cwd?: string): string | null {
 
 export function specFileAt(ref: string, hint: string | undefined, cwd?: string): string {
   if (hint) return hint;
-  const files = git(['ls-tree', '--name-only', ref], cwd).split('\n').filter((f) => f.endsWith('.specage'));
+  const files = git(['ls-tree', '--name-only', ref], cwd)
+    .split('\n')
+    .filter((f) => f.endsWith('.specage'));
   if (files.length !== 1) throw new CliError(`cannot find a single .specage file at ${ref}`, 3);
   return files[0];
 }
 
 /** Resolve `empty`, a file path, `dispatch/latest`, or a git ref to a Spec. */
-export function loadSpecRef(ref: string, opts: { specFile?: string; to?: string; cwd?: string }): Spec {
+export function loadSpecRef(
+  ref: string,
+  opts: { specFile?: string; to?: string; cwd?: string },
+): Spec {
   if (ref === 'empty') return { roots: [], diagnostics: [] };
   if (existsSync(ref)) return readSpecFile(ref);
   let r = ref;

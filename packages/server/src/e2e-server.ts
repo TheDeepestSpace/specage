@@ -6,7 +6,8 @@ import { openDb } from './db.js';
 import { loadEnv } from './env.js';
 import { FakeGitHub } from './fake-github.js';
 
-if (process.env.NODE_ENV !== 'development') throw new Error('e2e-server requires NODE_ENV=development');
+if (process.env.NODE_ENV !== 'development')
+  throw new Error('e2e-server requires NODE_ENV=development');
 const env = loadEnv();
 const gh = new FakeGitHub();
 gh.files['spec-state:trace.yaml'] = `retired_ids: [old.id]

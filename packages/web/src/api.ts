@@ -4,7 +4,10 @@ let csrf = '';
 export const setCsrf = (t: string) => (csrf = t);
 
 export class ApiError extends Error {
-  constructor(public status: number, public body: any) {
+  constructor(
+    public status: number,
+    public body: any,
+  ) {
     super(body?.error ?? `HTTP ${status}`);
   }
 }

@@ -1,11 +1,30 @@
 import { cpSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import {
-  OutboxSchema, buildData, diff, flatten, hasErrors, lint, loadState, summarize, walk,
-  type Diagnostic, type SpecNode,
+  OutboxSchema,
+  buildData,
+  diff,
+  flatten,
+  hasErrors,
+  lint,
+  loadState,
+  summarize,
+  walk,
+  type Diagnostic,
+  type SpecNode,
 } from '@specage/core';
 import {
-  CliError, cursorTag, git, gh, listFiles, loadSpecRef, readSpecFile, repoRoot, sleep, str, type Args,
+  CliError,
+  cursorTag,
+  git,
+  gh,
+  listFiles,
+  loadSpecRef,
+  readSpecFile,
+  repoRoot,
+  sleep,
+  str,
+  type Args,
 } from './util.js';
 
 type Out = (s: string) => void;
@@ -14,8 +33,16 @@ const out = (s: string) => ctx.out(s);
 
 function nodeSummary(n: SpecNode): any {
   return {
-    id: n.id, type: n.type, marker: n.marker, text: n.text, hash: n.hash, subtree_hash: n.subtreeHash,
-    parent: n.parent, lineage: n.lineage, line: n.line, children: n.children.map(nodeSummary),
+    id: n.id,
+    type: n.type,
+    marker: n.marker,
+    text: n.text,
+    hash: n.hash,
+    subtree_hash: n.subtreeHash,
+    parent: n.parent,
+    lineage: n.lineage,
+    line: n.line,
+    children: n.children.map(nodeSummary),
   };
 }
 
@@ -24,10 +51,19 @@ export function cmdParse(a: Args): number {
   if (!file) throw new CliError('usage: specage parse <file> [--json]');
   const spec = readSpecFile(file);
   const errs = spec.diagnostics.filter((d) => d.level === 'error');
-  if (a.flags.json) out(JSON.stringify({ nodes: spec.roots.map(nodeSummary), diagnostics: spec.diagnostics }, null, 2));
+  if (a.flags.json)
+    out(
+      JSON.stringify(
+        { nodes: spec.roots.map(nodeSummary), diagnostics: spec.diagnostics },
+        null,
+        2,
+      ),
+    );
   else {
     const p = (n: SpecNode, d: number) => {
-      out(`${'  '.repeat(d)}${n.id || '(no id)'}${n.type === 'block' ? ' {}' : ''}  ${n.hash}  ${n.text.slice(0, 60)}`);
+      out(
+        `${'  '.repeat(d)}${n.id || '(no id)'}${n.type === 'block' ? ' {}' : ''}  ${n.hash}  ${n.text.slice(0, 60)}`,
+      );
       n.children.forEach((c) => p(c, d + 1));
     };
     spec.roots.forEach((r) => p(r, 0));
@@ -47,11 +83,22 @@ export function cmdLint(a: Args): number {
   const sd = str(a, 'state');
   if (sd) {
     const { state, issues } = loadState(sd);
-    if (issues.length) throw new CliError(`invalid state: ${issues.map((i) => `${i.file} ${i.message}`).join('; ')}`, 1);
+    if (issues.length)
+      throw new CliError(
+        `invalid state: ${issues.map((i) => `${i.file} ${i.message}`).join('; ')}`,
+        1,
+      );
     ls = { retiredIds: state.trace.retired_ids, consumedLineage: state.trace.consumed_lineage };
   }
   const diags = lint(spec, ls);
-  if (a.flags.json) out(JSON.stringify(diags.map((d) => ({ file, ...d, node: d.node ?? null })), null, 2));
+  if (a.flags.json)
+    out(
+      JSON.stringify(
+        diags.map((d) => ({ file, ...d, node: d.node ?? null })),
+        null,
+        2,
+      ),
+    );
   else {
     diags.forEach((d) => out(formatDiag(file, d)));
     const e = diags.filter((d) => d.level === 'error').length;
@@ -66,7 +113,14 @@ export function cmdHash(a: Args): number {
   const spec = readSpecFile(file);
   const rows: { id: string; hash: string; subtree_hash: string }[] = [];
   walk(spec.roots, (n) => rows.push({ id: n.id, hash: n.hash, subtree_hash: n.subtreeHash }));
-  if (a.flags.json) out(JSON.stringify(Object.fromEntries(rows.map((r) => [r.id, { hash: r.hash, subtree_hash: r.subtree_hash }])), null, 2));
+  if (a.flags.json)
+    out(
+      JSON.stringify(
+        Object.fromEntries(rows.map((r) => [r.id, { hash: r.hash, subtree_hash: r.subtree_hash }])),
+        null,
+        2,
+      ),
+    );
   else rows.forEach((r) => out(`${r.id}\t${r.hash}\t${r.subtree_hash}`));
   return spec.diagnostics.some((d) => d.level === 'error') ? 1 : 0;
 }
@@ -74,7 +128,8 @@ export function cmdHash(a: Args): number {
 export function cmdDiff(a: Args): number {
   const from = str(a, 'from');
   const to = str(a, 'to');
-  if (!from || !to) throw new CliError('usage: specage diff --from <ref|file|empty> --to <ref|file> [--json]');
+  if (!from || !to)
+    throw new CliError('usage: specage diff --from <ref|file|empty> --to <ref|file> [--json]');
   const opts = { specFile: str(a, 'spec-file'), to, cwd: str(a, 'cwd') };
   const d = diff(loadSpecRef(from, opts), loadSpecRef(to, opts));
   out(a.flags.json ? JSON.stringify(d, null, 2) : summarize(d));
@@ -96,7 +151,11 @@ export function cmdState(a: Args): number {
     const dirOutbox = join(dir, 'outbox');
     for (const f of listFiles(dirOutbox).filter((f) => f.endsWith('.json'))) {
       const r = OutboxSchema.safeParse(JSON.parse(readFileSync(join(dirOutbox, f), 'utf8')));
-      if (!r.success) issues.push({ file: `outbox/${f}`, message: r.error.issues.map((i) => i.message).join('; ') });
+      if (!r.success)
+        issues.push({
+          file: `outbox/${f}`,
+          message: r.error.issues.map((i) => i.message).join('; '),
+        });
     }
     issues.forEach((i) => out(`${i.file}: ${i.message}`));
     if (!issues.length) out('state ok');
@@ -154,11 +213,13 @@ export function addedOutbox(range: string, cwd: string): string[] {
 }
 
 export function cmdOutbox(a: Args): number {
-  if (a._[1] !== 'fire') throw new CliError('usage: specage outbox fire --range <a>..<b> --repo <o/r> --intern <o/r>');
+  if (a._[1] !== 'fire')
+    throw new CliError('usage: specage outbox fire --range <a>..<b> --repo <o/r> --intern <o/r>');
   const range = str(a, 'range');
   const repo = str(a, 'repo');
   const intern = str(a, 'intern');
-  if (!range || !repo || !intern) throw new CliError('outbox fire needs --range, --repo and --intern');
+  if (!range || !repo || !intern)
+    throw new CliError('outbox fire needs --range, --repo and --intern');
   const workflow = str(a, 'workflow') ?? 'dispatcher.yml';
   const backend = str(a, 'backend') ?? 'claude';
   const cwd = str(a, 'cwd') ?? '.';
@@ -167,7 +228,19 @@ export function cmdOutbox(a: Args): number {
   for (const f of addedOutbox(range, cwd)) {
     const entry = OutboxSchema.parse(JSON.parse(git(['show', `${b}:${f}`], cwd)));
     const body = `backend=${backend} ${entry.body}`;
-    const cmd = ['workflow', 'run', workflow, '-R', intern, '-f', `target_repo=${repo}`, '-f', `pr_number=${entry.target}`, '-f', `comment_body=${body}`];
+    const cmd = [
+      'workflow',
+      'run',
+      workflow,
+      '-R',
+      intern,
+      '-f',
+      `target_repo=${repo}`,
+      '-f',
+      `pr_number=${entry.target}`,
+      '-f',
+      `comment_body=${body}`,
+    ];
     if (a.flags['dry-run']) out(`gh ${cmd.map((c) => JSON.stringify(c)).join(' ')}`);
     else
       try {
@@ -185,10 +258,15 @@ export function cmdRender(a: Args): number {
   const specFile = str(a, 'spec');
   const stateDir = str(a, 'state');
   const outDir = str(a, 'out');
-  if (!specFile || !outDir) throw new CliError('usage: specage render --spec <file> --state <dir> --out <dir>');
+  if (!specFile || !outDir)
+    throw new CliError('usage: specage render --spec <file> --state <dir> --out <dir>');
   const spec = readSpecFile(specFile);
   const { state, issues } = stateDir ? loadState(stateDir) : loadState('/nonexistent');
-  if (issues.length) throw new CliError(`invalid state: ${issues.map((i) => `${i.file} ${i.message}`).join('; ')}`, 1);
+  if (issues.length)
+    throw new CliError(
+      `invalid state: ${issues.map((i) => `${i.file} ${i.message}`).join('; ')}`,
+      1,
+    );
   let report: string | undefined;
   if (stateDir) {
     const rs = listFiles(join(stateDir, 'dispatches')).filter((f) => f.endsWith('.md'));

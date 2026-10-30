@@ -1,6 +1,15 @@
 #!/usr/bin/env node
 import { CliError, parseArgs } from './util.js';
-import { cmdCursor, cmdDiff, cmdHash, cmdLint, cmdOutbox, cmdParse, cmdRender, cmdState } from './commands.js';
+import {
+  cmdCursor,
+  cmdDiff,
+  cmdHash,
+  cmdLint,
+  cmdOutbox,
+  cmdParse,
+  cmdRender,
+  cmdState,
+} from './commands.js';
 import { cmdInstall } from './install.js';
 
 const HELP = `specage <command>
@@ -25,15 +34,24 @@ async function main(): Promise<number> {
     return cmd ? 0 : 2;
   }
   switch (cmd) {
-    case 'parse': return cmdParse(a);
-    case 'lint': return cmdLint(a);
-    case 'hash': return cmdHash(a);
-    case 'diff': return cmdDiff(a);
-    case 'state': return cmdState(a);
-    case 'cursor': return cmdCursor(a);
-    case 'outbox': return cmdOutbox(a);
-    case 'render': return cmdRender(a);
-    case 'install': return cmdInstall(a);
+    case 'parse':
+      return cmdParse(a);
+    case 'lint':
+      return cmdLint(a);
+    case 'hash':
+      return cmdHash(a);
+    case 'diff':
+      return cmdDiff(a);
+    case 'state':
+      return cmdState(a);
+    case 'cursor':
+      return cmdCursor(a);
+    case 'outbox':
+      return cmdOutbox(a);
+    case 'render':
+      return cmdRender(a);
+    case 'install':
+      return cmdInstall(a);
     default:
       throw new CliError(`unknown command "${cmd}"`);
   }

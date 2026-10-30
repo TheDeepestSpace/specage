@@ -1,0 +1,29 @@
+# Create the app and volume once (HUMAN): flyctl apps create <name> -o <org>; flyctl volumes create specage_data --size 1 --region yyz
+app = "specage"
+primary_region = "yyz"
+
+[build]
+  dockerfile = "../Dockerfile"
+  build-target = "server"
+
+[env]
+  PORT = "8080"
+  DB_PATH = "/data/specage.db"
+
+[[mounts]]
+  source = "specage_data"
+  destination = "/data"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+
+  [[http_service.checks]]
+    method = "GET"
+    path = "/healthz"
+    interval = "15s"
+    timeout = "3s"
+    grace_period = "10s"

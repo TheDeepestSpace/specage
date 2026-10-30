@@ -52,14 +52,29 @@ export function nodeStatus(n: SpecNode, state: State): NodeStatus {
 export function buildData(
   spec: Spec,
   state: State,
-  opts: { project: string; report?: string; editUrl?: string; repo?: string; specCommit?: string; now?: string } = { project: '' },
+  opts: {
+    project: string;
+    report?: string;
+    editUrl?: string;
+    repo?: string;
+    specCommit?: string;
+    now?: string;
+  } = { project: '' },
 ): SpecData {
   const nodes: Record<string, NodeView> = {};
   for (const n of flatten(spec)) {
     if (!n.id) continue;
     nodes[n.id] = {
-      id: n.id, type: n.type, marker: n.marker, text: n.text, hash: n.hash, subtreeHash: n.subtreeHash,
-      parent: n.parent, children: n.children.map((c) => c.id), line: n.line, status: nodeStatus(n, state),
+      id: n.id,
+      type: n.type,
+      marker: n.marker,
+      text: n.text,
+      hash: n.hash,
+      subtreeHash: n.subtreeHash,
+      parent: n.parent,
+      children: n.children.map((c) => c.id),
+      line: n.line,
+      status: nodeStatus(n, state),
     };
   }
   const aggregate: Record<string, Record<string, number>> = {};
@@ -68,7 +83,8 @@ export function buildData(
     if (nv.type === 'leaf') acc[nv.status] = (acc[nv.status] ?? 0) + 1;
     else nv.children.forEach((c) => collect(c, acc));
   };
-  for (const id of Object.keys(nodes)) if (nodes[id].type === 'block') collect(id, (aggregate[id] = {}));
+  for (const id of Object.keys(nodes))
+    if (nodes[id].type === 'block') collect(id, (aggregate[id] = {}));
   return {
     generated: opts.now ?? new Date().toISOString(),
     project: opts.project,

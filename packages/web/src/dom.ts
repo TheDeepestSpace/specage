@@ -21,9 +21,15 @@ export function h<K extends keyof HTMLElementTagNameMap>(
 export function safeUrl(u: string, extraOrigin?: string): string | null {
   try {
     const url = new URL(u, location.href);
-    if (url.protocol !== 'https:' && !(url.origin === location.origin && url.protocol === 'http:')) return null;
+    if (url.protocol !== 'https:' && !(url.origin === location.origin && url.protocol === 'http:'))
+      return null;
     const host = url.hostname;
-    if (host === 'github.com' || host.endsWith('.githubusercontent.com') || host.endsWith('.github.io')) return url.href;
+    if (
+      host === 'github.com' ||
+      host.endsWith('.githubusercontent.com') ||
+      host.endsWith('.github.io')
+    )
+      return url.href;
     if (url.origin === location.origin) return url.href;
     if (extraOrigin && url.origin === extraOrigin) return url.href;
     return null;
@@ -36,10 +42,18 @@ const mem = new Map<string, string>();
 /** localStorage may be unavailable (sandboxed Pages, private mode): fall back to memory. */
 export const store = {
   get(k: string): string | null {
-    try { return localStorage.getItem(k); } catch { return mem.get(k) ?? null; }
+    try {
+      return localStorage.getItem(k);
+    } catch {
+      return mem.get(k) ?? null;
+    }
   },
   set(k: string, v: string) {
-    try { localStorage.setItem(k, v); } catch { mem.set(k, v); }
+    try {
+      localStorage.setItem(k, v);
+    } catch {
+      mem.set(k, v);
+    }
   },
 };
 
