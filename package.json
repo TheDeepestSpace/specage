@@ -1,0 +1,26 @@
+{
+  "name": "specage-monorepo",
+  "private": true,
+  "type": "module",
+  "workspaces": ["packages/*"],
+  "engines": {"node": ">=22"},
+  "scripts": {
+    "build": "tsc -b packages/core packages/cli packages/server && npm run build -w @specage/web",
+    "typecheck": "tsc -b packages/core packages/cli packages/server && tsc --noEmit -p packages/web",
+    "lint": "eslint . && prettier --check .",
+    "format": "prettier --write .",
+    "test": "vitest run",
+    "fixtures:update": "node scripts/update-fixtures.mjs",
+    "dev": "NODE_ENV=development node packages/server/dist/index.js",
+    "prepare": "npm run build -w @specage/core -w @specage/cli || true"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.0.0",
+    "@types/node": "^22.0.0",
+    "eslint": "^9.0.0",
+    "prettier": "^3.0.0",
+    "typescript": "^5.6.0",
+    "typescript-eslint": "^8.0.0",
+    "vitest": "^2.1.0"
+  }
+}

@@ -1,0 +1,194 @@
+[
+  {
+    "id": "shoot",
+    "type": "block",
+    "marker": null,
+    "text": "Shooting",
+    "parent": null,
+    "lineage": [],
+    "line": 4,
+    "children": [
+      {
+        "id": "shoot.burst",
+        "type": "block",
+        "marker": null,
+        "text": "A held trigger fires a burst of up to three shots",
+        "parent": "shoot",
+        "lineage": [],
+        "line": 5,
+        "children": [
+          {
+            "id": "shoot.burst.cap",
+            "type": "leaf",
+            "marker": null,
+            "text": "A burst never exceeds the magazine capacity",
+            "parent": "shoot.burst",
+            "lineage": [],
+            "line": 6,
+            "children": []
+          },
+          {
+            "id": "shoot.burst.bar",
+            "type": "leaf",
+            "marker": null,
+            "text": "The HUD bar drains as the burst fires",
+            "parent": "shoot.burst",
+            "lineage": [],
+            "line": 7,
+            "children": []
+          },
+          {
+            "id": "shoot.burst.death",
+            "type": "leaf",
+            "marker": null,
+            "text": "The player dies mid-burst if hit",
+            "parent": "shoot.burst",
+            "lineage": [],
+            "line": 8,
+            "children": []
+          },
+          {
+            "id": "shoot.burst.ammo-nonneg",
+            "type": "leaf",
+            "marker": {
+              "name": "invariant"
+            },
+            "text": "!invariant: ammo count is never negative",
+            "parent": "shoot.burst",
+            "lineage": [],
+            "line": 9,
+            "children": []
+          }
+        ]
+      },
+      {
+        "id": "shoot.data",
+        "type": "leaf",
+        "marker": {
+          "name": "constraint"
+        },
+        "text": "!constraint: Weapon stats come from data files, never hardcoded",
+        "parent": "shoot",
+        "lineage": [],
+        "line": 11,
+        "children": []
+      },
+      {
+        "id": "shoot.impl",
+        "type": "leaf",
+        "marker": {
+          "name": "impl"
+        },
+        "text": "!impl: Weapons are plain structs updated once per tick",
+        "parent": "shoot",
+        "lineage": [],
+        "line": 12,
+        "children": []
+      },
+      {
+        "id": "shoot.burst.interrupt",
+        "type": "leaf",
+        "marker": {
+          "name": "question"
+        },
+        "text": "? Should bursts be interruptible by reload",
+        "parent": "shoot",
+        "lineage": [],
+        "line": 13,
+        "children": []
+      },
+      {
+        "id": "shoot.altfire",
+        "type": "leaf",
+        "marker": {
+          "name": "later"
+        },
+        "text": ">later: Alt-fire modes",
+        "parent": "shoot",
+        "lineage": [],
+        "line": 14,
+        "children": []
+      }
+    ]
+  },
+  {
+    "id": "round",
+    "type": "block",
+    "marker": null,
+    "text": "Rounds",
+    "parent": null,
+    "lineage": [],
+    "line": 17,
+    "children": [
+      {
+        "id": "round.duration",
+        "type": "leaf",
+        "marker": null,
+        "text": "A round always runs the full 5 s once it starts",
+        "parent": "round",
+        "lineage": [],
+        "line": 18,
+        "children": []
+      },
+      {
+        "id": "round.score",
+        "type": "leaf",
+        "marker": null,
+        "text": "Score is shown as a rank, with escapes @ { } ; # kept literal",
+        "parent": "round",
+        "lineage": [],
+        "line": 19,
+        "children": []
+      },
+      {
+        "id": "round.proof",
+        "type": "leaf",
+        "marker": {
+          "name": "proof",
+          "kind": "video",
+          "unknown": false
+        },
+        "text": "!proof video: a recorded round from start to scoreboard",
+        "parent": "round",
+        "lineage": [],
+        "line": 20,
+        "children": []
+      }
+    ]
+  },
+  {
+    "id": "menu",
+    "type": "block",
+    "marker": null,
+    "text": "Menus",
+    "parent": null,
+    "lineage": [],
+    "line": 23,
+    "children": [
+      {
+        "id": "menu.pause",
+        "type": "leaf",
+        "marker": null,
+        "text": "The pause menu opens on Esc",
+        "parent": "menu",
+        "lineage": [],
+        "line": 24,
+        "children": []
+      },
+      {
+        "id": "menu.pause-shot",
+        "type": "leaf",
+        "marker": {
+          "name": "proof",
+          "kind": "screenshot",
+          "unknown": false
+        },
+        "text": "!proof screenshot: the pause menu over a running game",
+        "parent": "menu",
+        "lineage": [],
+        "line": 25,
+        "children": []
+      }
+    ]
+  }
+]

@@ -1,0 +1,2 @@
+# expect: E003
+a @x; b @x;

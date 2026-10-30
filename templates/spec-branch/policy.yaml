@@ -1,0 +1,8 @@
+# What the dispatch session does with each class of change (PROTOCOL.md section 7.3)
+reconcile:
+  cosmetic:    {early: refresh, late: refresh}
+  refinement:  {early: amend,   late: amend}
+  addition:    {early: amend,   late: ask}
+  reversal:    {early: ask,     late: ask}
+  unsure: ask
+split_items: ask

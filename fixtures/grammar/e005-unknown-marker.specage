@@ -1,0 +1,2 @@
+# expect: E005
+!bogus: a @x;

@@ -1,0 +1,2 @@
+{ "name": "@specage/core", "version": "0.1.0", "type": "module", "main": "dist/index.js", "types": "dist/index.d.ts",
+  "exports": {".": "./dist/index.js"}, "dependencies": {"yaml": "^2.5.0", "zod": "^3.23.0"} }

@@ -1,0 +1,5 @@
+# {{project}}: spec skeleton. Every statement needs an @id; see GRAMMAR.md.
+
+{{project}}: describe the project here @{{project_id}} {
+
+};

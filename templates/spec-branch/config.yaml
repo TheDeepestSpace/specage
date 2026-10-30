@@ -1,0 +1,15 @@
+# specage configuration (written by `specage install`, edit by hand on the spec branch)
+specage_version: {{specage_version}}
+project: {{project}}
+spec_file: {{spec_file}}
+reviewer: {{reviewer}}
+intern:
+  repo: {{intern_repo}}
+  workflow: {{intern_workflow}}
+  backend: {{backend}}
+auto_implement: true
+pages:
+  mode: {{pages_mode}}
+  path: {{pages_path}}
+ui:
+  url: {{ui_url}}

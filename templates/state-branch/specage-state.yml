@@ -1,0 +1,33 @@
+name: specage-state
+on:
+  push:
+    branches: [spec-state]
+permissions:
+  contents: write
+concurrency: {group: 'specage-state-${{ github.repository }}', cancel-in-progress: false}
+jobs:
+  fire-outbox:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with: {fetch-depth: 0}
+      - uses: TheDeepestSpace/specage/packages/action/fire-outbox@{{specage_version}}
+        with:
+          before: ${{ github.event.before }}
+          after: ${{ github.sha }}
+          intern-repo: {{intern_repo}}
+          intern-workflow: {{intern_workflow}}
+          backend: {{backend}}
+          intern-token: ${{ secrets.INTERN_DISPATCH_TOKEN }}
+  publish:
+    if: {{pages_enabled}}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: TheDeepestSpace/specage/packages/action/publish@{{specage_version}}
+        with:
+          spec-file: {{spec_file}}
+          path: {{pages_path}}
+          branch: {{pages_branch}}
+          project: {{project}}
+          edit-url: {{ui_url}}
+          token: ${{ secrets.GITHUB_TOKEN }}

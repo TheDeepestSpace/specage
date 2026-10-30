@@ -1,0 +1,2 @@
+# expect: E006
+a @x; b @y <- x;

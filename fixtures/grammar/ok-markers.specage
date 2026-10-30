@@ -1,0 +1,2 @@
+# expect: none
+!constraint: a @x; !impl: b @y; !invariant: c @z; !proof video: d @w; ? e @v; >later: f @u;

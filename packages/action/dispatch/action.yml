@@ -1,0 +1,48 @@
+name: specage dispatch
+description: Lint, diff from the cursor, open the dispatch issue, and trigger the-intern
+inputs:
+  tag: {description: dispatch tag, required: true}
+  spec-file: {description: spec file name, required: true}
+  intern-repo: {description: the-intern repo, required: true}
+  intern-workflow: {description: the-intern dispatcher workflow, default: dispatcher.yml}
+  backend: {description: backend token for comment_body, default: claude}
+  intern-token: {description: INTERN_DISPATCH_TOKEN, required: true}
+  token: {description: GITHUB_TOKEN (issues write), required: true}
+  cli: {description: npx spec for the specage CLI, default: 'github:TheDeepestSpace/specage#v0'}
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+      with: {node-version: 22}
+    - name: Lint, diff, file the dispatch issue, trigger the-intern
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.token }}
+        INTERN_TOKEN: ${{ inputs.intern-token }}
+        TAG: ${{ inputs.tag }}
+        SPEC_FILE: ${{ inputs.spec-file }}
+        CLI: ${{ inputs.cli }}
+      run: |
+        set -euo pipefail
+        npx --yes "$CLI" lint "$SPEC_FILE"
+        cursor=$(npx --yes "$CLI" cursor --tag "$TAG")
+        from=${cursor:-empty}
+        npx --yes "$CLI" diff --from "$from" --to "$TAG" --spec-file "$SPEC_FILE" --json > "$RUNNER_TEMP/changes.json"
+        summary=$(npx --yes "$CLI" diff --from "$from" --to "$TAG" --spec-file "$SPEC_FILE")
+        ts=${TAG#dispatch/}
+        {
+          echo "Dispatch tag: \`$TAG\` (cursor: \`${cursor:-none, diff from empty}\`)"
+          echo
+          echo '```'
+          echo "$summary"
+          echo '```'
+          echo
+          echo "Reply here with @the-intern-bot to answer questions that are not spec text."
+        } > "$RUNNER_TEMP/issue.md"
+        url=$(gh issue create --title "specage dispatch $ts" --label specage-dispatch --body-file "$RUNNER_TEMP/issue.md")
+        n=${url##*/}
+        GH_TOKEN="$INTERN_TOKEN" gh workflow run "${{ inputs.intern-workflow }}" -R "${{ inputs.intern-repo }}" \
+          -f target_repo="$GITHUB_REPOSITORY" -f pr_number="$n" \
+          -f comment_body="backend=${{ inputs.backend }} Run the specage dispatch for tag $TAG. Follow origin/spec:.specage/PROTOCOL.md exactly."
+    - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      with: {name: changes, path: ${{ runner.temp }}/changes.json}
