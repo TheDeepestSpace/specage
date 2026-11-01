@@ -12,7 +12,7 @@ export default defineConfig({
   timeout: 30_000,
   reporter: [['list'], ['html', { open: 'never', outputFolder: 'playwright-report' }]],
   outputDir: 'test-results',
-  expect: { toHaveScreenshot: { maxDiffPixelRatio: 0.01, animations: 'disabled' } },
+  expect: { toHaveScreenshot: { maxDiffPixels: 50, animations: 'disabled' } },
   use: {
     baseURL: 'http://127.0.0.1:4174',
     colorScheme: 'light',
