@@ -103,6 +103,16 @@ class Parser {
     return { text, line: line || this.line, column: column || this.col };
   }
 
+  private derivedSeen = new Map<string, number>();
+
+  /** Stable name for an ID-less statement: hash of its case/whitespace-normalized words. */
+  private derive(text: string): string {
+    const base = 's-' + sha12(text.toLowerCase()).slice(0, 8);
+    const k = (this.derivedSeen.get(base) ?? 0) + 1;
+    this.derivedSeen.set(base, k);
+    return k === 1 ? base : `${base}-${k}`;
+  }
+
   private skipWs() {
     let prevSpace = true;
     while (this.pos < this.src.length) {
@@ -193,7 +203,8 @@ class Parser {
     const term = this.peek();
     const marker = detectMarker(text);
     const make = (type: 'leaf' | 'block'): SpecNode => ({
-      id: id ?? '',
+      id: id ?? this.derive(text),
+      derived: id === null,
       type,
       marker,
       text,
@@ -208,14 +219,9 @@ class Parser {
     });
     if (term === ';') {
       this.next();
-      if (id === null) {
-        this.err(
-          'E002',
-          text ? 'statement without an ID' : 'empty statement',
-          raw.line,
-          raw.column,
-        );
-        if (!text) return null;
+      if (id === null && !text) {
+        this.err('E002', 'empty statement', raw.line, raw.column);
+        return null;
       }
       const n = make('leaf');
       n.endLine = this.line;
@@ -224,7 +230,6 @@ class Parser {
     if (term === '{') {
       this.next();
       const n = make('block');
-      if (id === null) this.err('E002', 'statement without an ID', raw.line, raw.column);
       n.children = this.parseStatements(n, depth + 1);
       if (this.peek() === '}') {
         this.next();

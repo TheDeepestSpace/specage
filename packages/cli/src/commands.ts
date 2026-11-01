@@ -62,7 +62,7 @@ export function cmdParse(a: Args): number {
   else {
     const p = (n: SpecNode, d: number) => {
       out(
-        `${'  '.repeat(d)}${n.id || '(no id)'}${n.type === 'block' ? ' {}' : ''}  ${n.hash}  ${n.text.slice(0, 60)}`,
+        `${'  '.repeat(d)}${n.id}${n.type === 'block' ? ' {}' : ''}  ${n.hash}  ${n.text.slice(0, 60)}`,
       );
       n.children.forEach((c) => p(c, d + 1));
     };

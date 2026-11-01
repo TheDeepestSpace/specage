@@ -1,6 +1,6 @@
 # The specage language
 
-A specage file is a human-written tree of statements. Each statement has prose and a stable ID.
+A specage file is a human-written tree of statements. Each statement has prose and, optionally, an ID.
 The skeleton (nesting, IDs, markers) is fixed. Everything else is prose.
 
 ```
@@ -22,7 +22,9 @@ text      = [ marker ] , prose ;
 
 ## IDs
 
-- Every statement has one. Untracked asides go in comments.
+- IDs are optional. An explicit ID (`@name`) works like a YAML anchor: a human-chosen name other parts of the spec and the trail can reference. Untracked asides go in comments.
+- A statement without an ID gets a **derived name** `s-<8 hex>`: `sha256(lowercase(own_text))[:8]`. Whitespace and case don't change it; any other wording change does. Identical ID-less statements in one file get `-2`, `-3`, ... suffixes in file order. Derived names key trace, diffs, CLI output and coverage, but are not anchors: no uniqueness (E003), retirement (E004), prefix (W101) or lineage checks apply.
+- Because rewording an ID-less statement changes its name, the diff shows remove + add. Treat it as *possibly the same statement reworded* (see PROTOCOL reconcile ladder). Give a statement an explicit ID to track it across rewording.
 - An ID is a name, not a path. A child usually extends its parent's prefix (warning if not).
 - IDs are unique and never reused. A removed node's ID is retired in `trace.yaml` on the project's trail branch.
 - A moved node keeps its ID.
@@ -54,7 +56,7 @@ Remove the `<-` clause after one dispatch has consumed it.
 
 ## Hashing
 
-`own_text` = marker + prose, with comments and the ID clause removed, escapes unescaped, whitespace runs collapsed to one space, trimmed. Case preserved.
+`own_text` = marker + prose, with comments and the ID clause removed (derived names hash the lowercased text), escapes unescaped, whitespace runs collapsed to one space, trimmed. Case preserved.
 
 - `hash = sha256(own_text)[:12]`
 - `subtree_hash = sha256(hash + "\n" + join("\n", child subtree_hashes))[:12]`
@@ -64,7 +66,7 @@ Remove the `<-` clause after one dispatch has consumed it.
 | Code | Level | Rule |
 |---|---|---|
 | E001 | error | Parse error |
-| E002 | error | Statement without an ID |
+| E002 | error | Empty statement |
 | E003 | error | Duplicate ID |
 | E004 | error | Retired ID reused (needs `--state`) |
 | E005 | error | Unknown marker |

@@ -26,10 +26,10 @@ describe('exit codes', () => {
   it('0 on a clean file, 1 on lint errors, 2 on usage errors', () => {
     expect(run(['lint', FIX]).code).toBe(0);
     const bad = join(tmp(), 'bad.specage');
-    writeFileSync(bad, 'no id;\n');
+    writeFileSync(bad, 'a @x; b @x;\n');
     const r = run(['lint', bad]);
     expect(r.code).toBe(1);
-    expect(r.out).toContain('E002');
+    expect(r.out).toContain('E003');
     expect(run(['lint']).code).toBe(2);
     expect(run(['nope']).code).toBe(2);
     expect(run([]).code).toBe(2);
