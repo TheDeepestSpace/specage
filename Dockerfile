@@ -1,4 +1,4 @@
-# Targets: ci (base toolchain), dev (devcontainer + the-intern dev image), build, server (default, deployed to Fly).
+# Targets: ci (base toolchain), dev (devcontainer + the-intern dev image; Playwright noble image, same as CI visual), build, server (default, deployed to Fly).
 FROM docker.io/ubuntu:22.04 AS ci
 ARG DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -13,16 +13,22 @@ RUN ARCH="$(uname -m)"; case "$ARCH" in x86_64) A=x64 ;; aarch64|arm64) A=arm64 
     | tar -xJ -C /usr/local --strip-components=1 --no-same-owner
 ENTRYPOINT ["/usr/bin/dumb-init", "--"]
 
-FROM ci AS dev
+# Same image as the CI `visual` job, so screenshots rendered in the devcontainer (and by the-intern agents) match CI baselines.
+# Keep the tag in step with @playwright/test and ci.yml / update-snapshots.yml.
+FROM mcr.microsoft.com/playwright:v1.64.1-noble AS dev
+ARG DEBIAN_FRONTEND=noninteractive
 USER root
-# gh CLI, and Playwright's Chromium with its system dependencies
-RUN mkdir -p -m 755 /etc/apt/keyrings \
-    && curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg -o /etc/apt/keyrings/githubcli-archive-keyring.gpg \
-    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" > /etc/apt/sources.list.d/github-cli.list \
-    && apt-get update && apt-get install -y --no-install-recommends gh && rm -rf /var/lib/apt/lists/*
-ENV PLAYWRIGHT_BROWSERS_PATH=/opt/ms-playwright
-RUN npx --yes playwright@1.48.2 install --with-deps chromium && chmod -R a+rX /opt/ms-playwright && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      build-essential python3 git curl wget ca-certificates openssh-client dumb-init sudo xz-utils jq gh \
+    && rm -rf /var/lib/apt/lists/*
+# The base image ships a uid-1000 `ubuntu` user; replace it so `dev` gets uid 1000 like the other dev images.
+RUN (userdel -r ubuntu 2>/dev/null || true) \
+    && useradd --create-home --shell /bin/bash --uid 1000 dev \
+    && usermod --append --groups sudo dev \
+    && echo '%sudo ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 RUN mkdir -p /__w /github/workspace && chmod -R 777 /__w /github 2>/dev/null || true
+ENTRYPOINT ["/usr/bin/dumb-init", "--"]
 USER dev
 WORKDIR /home/dev
 
