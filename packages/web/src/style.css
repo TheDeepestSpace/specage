@@ -257,17 +257,43 @@ pre {
 .split {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 22rem;
-  height: calc(100vh - 3.4rem);
+  height: calc(100vh - var(--top-h, 3.4rem));
+  min-height: 0;
 }
 .editor-host {
-  overflow: auto;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden; /* CodeMirror scrolls inside .cm-scroller */
   border-right: 1px solid var(--line);
 }
 .editor-host .cm-editor {
-  min-height: 100%;
+  height: 100%;
+  min-width: 0;
 }
 .cm-editor.cm-focused {
   outline: none;
+}
+.cm-editor .cm-scroller {
+  overflow: auto;
+  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 13px;
+  line-height: 1.6;
+}
+.cm-editor .cm-content {
+  padding: 0.5rem 0;
+}
+.cm-editor .cm-line {
+  padding: 0 0.75rem 0 0.9rem; /* breathing room between gutter and text */
+}
+.cm-editor .cm-gutters {
+  flex-shrink: 0;
+  background: var(--card);
+  color: var(--mut);
+  border-right: 1px solid var(--line);
+}
+.cm-editor .cm-lineNumbers .cm-gutterElement {
+  min-width: 2.2ch;
+  padding: 0 0.4rem 0 0.6rem;
 }
 .pane {
   overflow: auto;
@@ -283,7 +309,7 @@ pre {
   margin: 0.5rem 0;
 }
 .cm-status-gutter {
-  width: 16px;
+  width: 18px;
 }
 .dot {
   display: inline-block;
@@ -363,8 +389,13 @@ dialog.conflict {
 }
 @media (max-width: 800px) {
   .split {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: 60vh auto;
     height: auto;
+  }
+  .editor-host {
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
   }
   .cols {
     grid-template-columns: 1fr;
