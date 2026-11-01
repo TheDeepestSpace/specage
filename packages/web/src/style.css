@@ -403,7 +403,8 @@ dialog.conflict {
 }
 
 /* completion + other CodeMirror tooltips, themed via app variables (light and dark) */
-.cm-tooltip {
+body .cm-tooltip,
+body .cm-tooltip.cm-tooltip-autocomplete {
   background: var(--card);
   color: var(--fg);
   border: 1px solid var(--line);
