@@ -1,4 +1,4 @@
-# Create the app and volume once (HUMAN): flyctl apps create <name> -o <org>; flyctl volumes create specage_data --size 1 --region yyz
+# App and volume are created by the CI deploy job if missing (org: vars.FLY_ORG or first org of the token).
 app = "specage"
 primary_region = "yyz"
 
