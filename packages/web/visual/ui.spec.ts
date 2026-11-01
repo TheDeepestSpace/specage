@@ -149,7 +149,46 @@ test.describe('dark scheme', () => {
     expect(cur).toBe(c.text);
     await page.keyboard.press('Escape');
     await page.locator('#vim').uncheck();
-    await page.locator('h1').click(); // blur the editor so no cursor is in the shot
+    await page.locator('h1').first().click(); // blur the editor so no cursor is in the shot
     await expect(page).toHaveScreenshot('editor-dark.png');
   });
+});
+
+test('editor: Tab stays in the editor; completion popup is visible and themed', async ({
+  page,
+}) => {
+  await openEditor(page);
+  const content = page.locator('.cm-content');
+  await content.click();
+  await page.keyboard.press('Control+End');
+  await page.keyboard.press('Enter');
+  // Tab indents instead of moving focus
+  await page.keyboard.press('Tab');
+  await expect(content).toBeFocused();
+  // typing "@" opens the completion popup
+  await page.keyboard.type('Hello @');
+  const tip = page.locator('.cm-tooltip-autocomplete');
+  await expect(tip).toBeVisible();
+  await expect(tip.locator('li[aria-selected]')).toBeVisible();
+  const bg = await tip.evaluate((el) => getComputedStyle(el).backgroundColor);
+  const card = await page.evaluate(() => {
+    const d = document.createElement('div');
+    d.style.background = 'var(--card)';
+    document.body.append(d);
+    const c = getComputedStyle(d).backgroundColor;
+    d.remove();
+    return c;
+  });
+  expect(bg).toBe(card);
+  // Tab accepts the completion and focus remains
+  await page.keyboard.press('Tab');
+  await expect(tip).toBeHidden();
+  await expect(content).toBeFocused();
+  // Esc closes the popup; Esc then Tab leaves the editor
+  await page.keyboard.type(' @');
+  await expect(tip).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(tip).toBeHidden();
+  await page.keyboard.press('Tab');
+  await expect(content).not.toBeFocused();
 });

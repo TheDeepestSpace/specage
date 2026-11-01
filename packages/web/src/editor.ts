@@ -1,5 +1,11 @@
-import { autocompletion, type CompletionContext } from '@codemirror/autocomplete';
-import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
+import {
+  acceptCompletion,
+  autocompletion,
+  completionKeymap,
+  type CompletionContext,
+  type CompletionResult,
+} from '@codemirror/autocomplete';
+import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands';
 import {
   codeFolding,
   foldGutter,
@@ -8,7 +14,7 @@ import {
   foldedRanges,
 } from '@codemirror/language';
 import { linter, lintGutter, type Diagnostic as CmDiag } from '@codemirror/lint';
-import { Compartment, EditorState, StateEffect, StateField, type Range } from '@codemirror/state';
+import { Compartment, EditorState, Prec, StateEffect, StateField, type Range } from '@codemirror/state';
 import {
   Decoration,
   EditorView,
@@ -27,6 +33,8 @@ import { api, ApiError, loadMe } from './api.js';
 import { analyse, dotStatus, nodeAtLine, slug, type Analysis } from './analysis.js';
 import { conflictDialog } from './conflict.js';
 import { h, store } from './dom.js';
+import grammarSrc from '../../../protocol/GRAMMAR.md?raw';
+import { renderMarkdown } from './markdown.js';
 import { renderPane } from './tracepane.js';
 import { aggregateText } from './viewer.js';
 
@@ -184,7 +192,22 @@ export async function renderEditor(root: HTMLElement, repo: string) {
     { delay: 150 },
   );
 
-  const idCompletion = (ctx: CompletionContext) => {
+  // statement markers valid at the start of a statement
+  const markerOptions = [
+    { label: '!invariant:', detail: 'invariant', apply: '!invariant: ' },
+    { label: '!constraint:', detail: 'constraint', apply: '!constraint: ' },
+    { label: '!impl:', detail: 'implementation note', apply: '!impl: ' },
+    { label: '!proof', detail: 'proof (e.g. !proof video:)', apply: '!proof ' },
+    { label: '?', detail: 'open question' },
+    { label: '>later:', detail: 'deferred item' },
+  ].map((o) => ({ type: 'keyword', ...o }));
+  const markerCompletion = (ctx: CompletionContext): CompletionResult | null => {
+    const m = ctx.matchBefore(/(?<=(?:^|[;{}])\s*)[!?>][\w:]*/m);
+    if (!m) return null;
+    return { from: m.from, options: markerOptions, validFor: /^[!?>][\w:]*$/ };
+  };
+
+  const idCompletion = (ctx: CompletionContext): CompletionResult | null => {
     const m = ctx.matchBefore(/(?<!\\)@[a-z0-9_.-]*/);
     if (!m && !ctx.explicit) return null;
     const a = ctx.state.field(analysisField);
@@ -216,6 +239,52 @@ export async function renderEditor(root: HTMLElement, repo: string) {
   const diagBox = h('ul', { id: 'diagnostics', class: 'diags' });
   const paneEl = h('aside', { id: 'pane', class: 'pane' });
   const editorEl = h('div', { id: 'editor', class: 'editor-host' });
+  // Tabs: the CodeMirror view stays mounted (just hidden) so edits/cursor survive switching.
+  const grammarEl = h('article', {
+    id: 'grammar',
+    class: 'grammar-host',
+    role: 'tabpanel',
+    'aria-labelledby': 'tab-grammar',
+    hidden: true,
+  });
+  grammarEl.append(renderMarkdown(grammarSrc));
+  const specTab = h(
+    'button',
+    {
+      id: 'tab-spec',
+      role: 'tab',
+      'aria-selected': 'true',
+      'aria-controls': 'editor',
+    },
+    'Spec',
+  );
+  const grammarTab = h(
+    'button',
+    {
+      id: 'tab-grammar',
+      role: 'tab',
+      'aria-selected': 'false',
+      'aria-controls': 'grammar',
+    },
+    'GRAMMAR.md',
+  );
+  const selectTab = (which: 'spec' | 'grammar') => {
+    const spec = which === 'spec';
+    specTab.setAttribute('aria-selected', String(spec));
+    grammarTab.setAttribute('aria-selected', String(!spec));
+    editorEl.hidden = !spec;
+    grammarEl.hidden = spec;
+    if (spec) view.focus();
+  };
+  specTab.addEventListener('click', () => selectTab('spec'));
+  grammarTab.addEventListener('click', () => selectTab('grammar'));
+  const editorCol = h(
+    'div',
+    { class: 'editor-col' },
+    h('div', { class: 'tabs', role: 'tablist' }, specTab, grammarTab),
+    editorEl,
+    grammarEl,
+  );
   root.replaceChildren(
     h(
       'header',
@@ -228,7 +297,7 @@ export async function renderEditor(root: HTMLElement, repo: string) {
       saveBtn,
     ),
     diagBox,
-    h('div', { class: 'split' }, editorEl, paneEl),
+    h('div', { class: 'split' }, editorCol, paneEl),
   );
 
   // the split fills the viewport below the (possibly wrapped) header
@@ -301,6 +370,7 @@ export async function renderEditor(root: HTMLElement, repo: string) {
   // `:w` (and `:write`) saves through the same path as Mod-s / the Save button
   Vim.defineEx('write', 'w', () => void save());
 
+  let tabEscape = false;
   const view: EditorView = new EditorView({
     parent: editorEl,
     state: EditorState.create({
@@ -319,9 +389,26 @@ export async function renderEditor(root: HTMLElement, repo: string) {
         highlight,
         lintSource,
         lintGutter(),
-        autocompletion({ override: [idCompletion] }),
+        autocompletion({ override: [idCompletion, markerCompletion], defaultKeymap: true }),
         EditorView.lineWrapping,
+        // highest precedence: the completion keymap swallows Escape while its popup is open
+        Prec.highest(
+          EditorView.domEventHandlers({
+            // a11y escape hatch: Esc then Tab lets focus leave the editor
+            keydown(e) {
+              if (e.key === 'Escape') tabEscape = true;
+              else if (e.key !== 'Tab' && !e.key.startsWith('Shift')) tabEscape = false;
+              return false;
+            },
+          }),
+        ),
         keymap.of([
+          { key: 'Tab', run: acceptCompletion },
+          {
+            key: 'Tab',
+            run: (v) => (tabEscape ? false : indentWithTab.run!(v)),
+            shift: (v) => (tabEscape ? false : indentWithTab.shift!(v)),
+          },
           {
             key: 'Mod-s',
             run: () => {
@@ -330,6 +417,7 @@ export async function renderEditor(root: HTMLElement, repo: string) {
             },
           },
           ...foldKeymap,
+          ...completionKeymap,
           ...defaultKeymap,
           ...historyKeymap,
         ]),
