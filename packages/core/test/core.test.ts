@@ -33,14 +33,18 @@ describe('parse', () => {
     expect(s.roots[1].line).toBe(5);
     expect(s.roots[0].endLine).toBe(4);
   });
-  it('continuation: CRLF, EOF, escaped backslash, missing ID', () => {
+  it('continuation: CRLF, EOF, escaped backslash, ID-less statement', () => {
     expect(parse('a \\\r\nb @x;').roots[0].text).toBe('a b');
     expect(parse('a @x; \\').diagnostics).toEqual([]);
     const e = parse('a \\\\\nb @x;');
     expect(e.roots[0].text).toBe('a \\ b');
     const m = parse('no \\\nid;');
-    expect(m.diagnostics.map((d) => d.code)).toEqual(['E002']);
-    expect(m.diagnostics[0].line).toBe(1);
+    expect(m.diagnostics).toEqual([]);
+    expect(m.roots[0].derived).toBe(true);
+    expect(m.roots[0].id).toBe(parse('no id;').roots[0].id);
+    expect(m.roots[0].text).toBe('no id');
+    expect(m.roots[0].line).toBe(1);
+    expect(m.roots[0].endLine).toBe(2);
   });
   it('hash is whitespace independent and case sensitive', () => {
     expect(parse('a   b\n c @x;').roots[0].hash).toBe(parse('a b c @x;').roots[0].hash);
