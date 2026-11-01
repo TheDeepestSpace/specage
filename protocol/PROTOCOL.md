@@ -30,7 +30,7 @@ Stop at the first rung that applies.
    - partial: file an issue for the gap only, linking existing evidence.
    - contradicts: open a **question**, not an issue.
    - absent: file an issue.
-6. **removed**: if in-flight work exists, ask. Otherwise retire the ID and note whether code for it still exists. Never delete code unprompted.
+6. **removed**: first, if the removal pairs with an added node that has a derived name (ID-less statements get a new name when reworded), compare old and new text. If the meaning is unchanged, treat it as cosmetic (rung 3): no action, and carry the old trace entry, evidence and claims over to the new derived name. If it changed, handle the pair as removed + added. Otherwise, if in-flight work exists, ask. Otherwise retire the ID and note whether code for it still exists. Never delete code unprompted.
 7. **suspected_rename**: ask (question kind `rename`).
 
 Skip nodes marked `?` (open question) and `>later:`; list them in the report only.

@@ -1,0 +1,5 @@
+# expect: none
+a statement without an id;
+group without id {
+  child without id;
+};

@@ -231,9 +231,9 @@ describe('API', () => {
     const h = harness();
     await h.signup(auth());
     const base = h.github.head().sha;
-    const bad = await h.req('PUT', '/api/r/o/r/spec', { content: 'no id here;', base_sha: base });
+    const bad = await h.req('PUT', '/api/r/o/r/spec', { content: 'a @x; b @x;', base_sha: base });
     expect(bad.status).toBe(422);
-    expect(((await bad.json()) as any).diagnostics[0].code).toBe('E002');
+    expect(((await bad.json()) as any).diagnostics[0].code).toBe('E003');
     expect(
       (await h.req('PUT', '/api/r/o/r/spec', { content: 'x @old.id;', base_sha: base })).status,
     ).toBe(422); // E004 via trace
