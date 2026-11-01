@@ -15,7 +15,7 @@
     "@codemirror/state": "^6.4.0",
     "@codemirror/view": "^6.34.0",
     "@replit/codemirror-vim": "^6.4.0",
-    "@simplewebauthn/browser": "^11.0.0",
+    "@simplewebauthn/browser": "^14.0.0",
     "@specage/core": "*"
   },
   "devDependencies": {
