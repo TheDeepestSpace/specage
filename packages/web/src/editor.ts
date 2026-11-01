@@ -14,7 +14,7 @@ import {
   foldedRanges,
 } from '@codemirror/language';
 import { linter, lintGutter, type Diagnostic as CmDiag } from '@codemirror/lint';
-import { EditorState, StateEffect, StateField, type Range } from '@codemirror/state';
+import { EditorState, Prec, StateEffect, StateField, type Range } from '@codemirror/state';
 import {
   Decoration,
   EditorView,
@@ -319,14 +319,17 @@ export async function renderEditor(root: HTMLElement, repo: string) {
         lintGutter(),
         autocompletion({ override: [idCompletion, markerCompletion], defaultKeymap: true }),
         EditorView.lineWrapping,
-        EditorView.domEventHandlers({
-          // a11y escape hatch: Esc then Tab lets focus leave the editor
-          keydown(e) {
-            if (e.key === 'Escape') tabEscape = true;
-            else if (e.key !== 'Tab' && !e.key.startsWith('Shift')) tabEscape = false;
-            return false;
-          },
-        }),
+        // highest precedence: the completion keymap swallows Escape while its popup is open
+        Prec.highest(
+          EditorView.domEventHandlers({
+            // a11y escape hatch: Esc then Tab lets focus leave the editor
+            keydown(e) {
+              if (e.key === 'Escape') tabEscape = true;
+              else if (e.key !== 'Tab' && !e.key.startsWith('Shift')) tabEscape = false;
+              return false;
+            },
+          }),
+        ),
         keymap.of([
           { key: 'Tab', run: acceptCompletion },
           {
