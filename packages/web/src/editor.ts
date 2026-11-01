@@ -116,7 +116,7 @@ export async function renderEditor(root: HTMLElement, repo: string) {
 
   const decoRe: [RegExp, string][] = [
     [/(?<=^|\s)#[^\n]*/gm, 'cm-spec-comment'],
-    [/\\[{};@#\\]/g, 'cm-spec-escape'],
+    [/\\[{};@#\\]|\\(?=[ \t]*\r?$)/gm, 'cm-spec-escape'],
     [
       /(?<!\\)@[a-z][a-z0-9_.-]*(?:\s*<-\s*[a-z][a-z0-9_.-]*(?:\s*,\s*[a-z][a-z0-9_.-]*)*)?/g,
       'cm-spec-id',

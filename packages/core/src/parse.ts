@@ -80,6 +80,15 @@ class Parser {
         const startCol = this.col;
         this.next();
         const e = this.peek();
+        // line continuation: `\` + optional trailing blanks + newline (or EOF)
+        const rest = this.src.slice(this.pos);
+        if (/^[ \t]*(\r?\n|$)/.test(rest)) {
+          while (this.pos < this.src.length && this.peek() !== '\n') this.next();
+          if (this.pos < this.src.length) this.next();
+          text += ' ';
+          prevSpace = true;
+          continue;
+        }
         if (e !== undefined && '{};@#\\'.includes(e)) {
           if (!line) {
             line = startLine;

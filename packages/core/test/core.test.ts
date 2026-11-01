@@ -22,6 +22,26 @@ describe('parse', () => {
  c \@ @x;`);
     expect(s.roots[0].text).toBe('a ; b c @');
   });
+  it('joins lines ending in a backslash', () => {
+    const s = parse(
+      'i \\\nwant \\\n   to be able to write \\\nlong lines @long-lines-req;\nnext @n;',
+    );
+    expect(s.diagnostics).toEqual([]);
+    expect(s.roots[0].id).toBe('long-lines-req');
+    expect(s.roots[0].text).toBe('i want to be able to write long lines');
+    expect(s.roots[0].hash).toBe(parse('i want to be able to write long lines @x;').roots[0].hash);
+    expect(s.roots[1].line).toBe(5);
+    expect(s.roots[0].endLine).toBe(4);
+  });
+  it('continuation: CRLF, EOF, escaped backslash, missing ID', () => {
+    expect(parse('a \\\r\nb @x;').roots[0].text).toBe('a b');
+    expect(parse('a @x; \\').diagnostics).toEqual([]);
+    const e = parse('a \\\\\nb @x;');
+    expect(e.roots[0].text).toBe('a \\ b');
+    const m = parse('no \\\nid;');
+    expect(m.diagnostics.map((d) => d.code)).toEqual(['E002']);
+    expect(m.diagnostics[0].line).toBe(1);
+  });
   it('hash is whitespace independent and case sensitive', () => {
     expect(parse('a   b\n c @x;').roots[0].hash).toBe(parse('a b c @x;').roots[0].hash);
     expect(parse('A @x;').roots[0].hash).not.toBe(parse('a @x;').roots[0].hash);

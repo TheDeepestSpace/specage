@@ -19,6 +19,7 @@ text      = [ marker ] , prose ;
 - Comment: `#` at the start of a line or after whitespace, to end of line. Excluded from hashes.
 - Reserved characters in text: `{ } ; @ #`. Escape with a backslash: `\; \{ \} \@ \# \\`.
 - Indentation and line breaks are cosmetic.
+- Line continuation: a trailing `\` (last character on a line, before the newline) joins the next line to the statement; the break and the next line's leading whitespace become a single space. The `@id` may be on any line, normally the last. A `\` at EOF is ignored. `\\` at line end is an escaped backslash, not a continuation. Diagnostics keep original line numbers.
 
 ## IDs
 
