@@ -8,18 +8,20 @@ import {
   foldedRanges,
 } from '@codemirror/language';
 import { linter, lintGutter, type Diagnostic as CmDiag } from '@codemirror/lint';
-import { EditorState, StateEffect, StateField, type Range } from '@codemirror/state';
+import { Compartment, EditorState, StateEffect, StateField, type Range } from '@codemirror/state';
 import {
   Decoration,
   EditorView,
   GutterMarker,
   ViewPlugin,
+  drawSelection,
   gutter,
   keymap,
   lineNumbers,
   type DecorationSet,
   type ViewUpdate,
 } from '@codemirror/view';
+import { Vim, getCM, vim } from '@replit/codemirror-vim';
 import { diff as coreDiff, lint, parse, type State } from '@specage/core/browser';
 import { api, ApiError, loadMe } from './api.js';
 import { analyse, dotStatus, nodeAtLine, slug, type Analysis } from './analysis.js';
@@ -27,6 +29,11 @@ import { conflictDialog } from './conflict.js';
 import { h, store } from './dom.js';
 import { renderPane } from './tracepane.js';
 import { aggregateText } from './viewer.js';
+
+const VIM_KEY = 'editor-vim';
+const darkMq = matchMedia('(prefers-color-scheme: dark)');
+// Tells CodeMirror which scheme it is in, so its own `&dark` rules (caret, selection, tooltips) apply.
+const schemeTheme = (dark: boolean) => EditorView.theme({}, { dark });
 
 const emptyState = (): State => ({
   trace: { retired_ids: [], consumed_lineage: [], nodes: {} },
@@ -226,6 +233,8 @@ export async function renderEditor(root: HTMLElement, repo: string) {
   // ---- layout ----
   const status = h('span', { id: 'status', class: 'status', role: 'status' });
   const saveBtn = h('button', { id: 'save', disabled: true }, 'Save') as HTMLButtonElement;
+  const vimBox = h('input', { type: 'checkbox', id: 'vim' }) as HTMLInputElement;
+  const vimMode = h('span', { id: 'vim-mode', class: 'vim-mode', role: 'status', hidden: true });
   const diagBox = h('ul', { id: 'diagnostics', class: 'diags' });
   const paneEl = h('aside', { id: 'pane', class: 'pane' });
   const editorEl = h('div', { id: 'editor', class: 'editor-host' });
@@ -236,6 +245,8 @@ export async function renderEditor(root: HTMLElement, repo: string) {
       h('h1', {}, repo),
       h('a', { href: '/' }, 'repos'),
       status,
+      h('label', { class: 'toggle', title: 'Vim keybindings' }, vimBox, 'Vim'),
+      vimMode,
       saveBtn,
     ),
     diagBox,
@@ -280,11 +291,46 @@ export async function renderEditor(root: HTMLElement, repo: string) {
     );
   };
 
+  // ---- vim (opt-in, persisted) ----
+  const vimConf = new Compartment();
+  const scheme = new Compartment();
+  // drawSelection is needed for visual-mode selections; only on while vim is on so the
+  // default (native) caret/selection is unchanged otherwise.
+  const vimExt = () => [vim(), drawSelection()];
+  const showMode = (mode: string, sub?: string) => {
+    vimMode.textContent =
+      `${mode}${sub === 'linewise' ? ' line' : sub === 'blockwise' ? ' block' : ''}`
+        .toUpperCase()
+        .trim();
+  };
+  const setVim = (on: boolean) => {
+    view.dispatch({ effects: vimConf.reconfigure(on ? vimExt() : []) });
+    vimBox.checked = on;
+    vimMode.hidden = !on;
+    if (on) {
+      showMode('normal');
+      // the plugin signals the initial mode before we can listen, so seed it above
+      getCM(view)?.on('vim-mode-change', (e: { mode: string; subMode?: string }) =>
+        showMode(e.mode, e.subMode),
+      );
+    }
+  };
+  vimBox.addEventListener('change', () => {
+    setVim(vimBox.checked);
+    store.set(VIM_KEY, vimBox.checked ? '1' : '0');
+    view.focus();
+  });
+  // `:w` (and `:write`) saves through the same path as Mod-s / the Save button
+  Vim.defineEx('write', 'w', () => void save());
+
   const view: EditorView = new EditorView({
     parent: editorEl,
     state: EditorState.create({
       doc: spec.content,
       extensions: [
+        // vim must come before every other keymap so it sees keys first (passes through in insert mode)
+        vimConf.of([]),
+        scheme.of(schemeTheme(darkMq.matches)),
         analysisField,
         lineNumbers(),
         statusGutter,
@@ -321,6 +367,10 @@ export async function renderEditor(root: HTMLElement, repo: string) {
     }),
   });
   void foldedRanges;
+  if (store.get(VIM_KEY) === '1') setVim(true);
+  darkMq.addEventListener('change', (e) =>
+    view.dispatch({ effects: scheme.reconfigure(schemeTheme(e.matches)) }),
+  );
   paneUpdate();
   addEventListener('beforeunload', (e) => {
     if (dirty()) e.preventDefault();

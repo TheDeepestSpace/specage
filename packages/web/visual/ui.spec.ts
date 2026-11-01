@@ -71,3 +71,85 @@ test('editor: empty pane state', async ({ page }) => {
   await expect(page.locator('#pane')).toContainText('Place the cursor in a node.');
   await expect(page).toHaveScreenshot('editor-empty.png');
 });
+
+test('editor: vim toggle (persisted, mode indicator, :w saves)', async ({ page }) => {
+  await openEditor(page);
+  const vim = page.locator('#vim');
+  const mode = page.locator('#vim-mode');
+  await expect(vim).not.toBeChecked();
+  await expect(mode).toBeHidden();
+  await expect(page.locator('.cm-fat-cursor')).toHaveCount(0);
+
+  await vim.check();
+  await page.locator('.cm-line', { hasText: 'never exceeds the magazine' }).click();
+  await expect(mode).toHaveText('NORMAL');
+  await expect(page.locator('.cm-fat-cursor').first()).toBeVisible();
+  await page.keyboard.press('i');
+  await expect(mode).toHaveText('INSERT');
+  await page.keyboard.type('x');
+  await page.keyboard.press('Escape');
+  await expect(mode).toHaveText('NORMAL');
+  await page.keyboard.press('V');
+  await expect(mode).toHaveText('VISUAL LINE');
+  await page.keyboard.press('Escape');
+  await expect(mode).toHaveText('NORMAL');
+  // :w goes through the normal save path (mocked PUT)
+  await expect(page.locator('#save')).toBeEnabled();
+  await page.keyboard.type(':w');
+  await page.keyboard.press('Enter');
+  await expect(page.locator('#status')).toHaveText('Saved bbbbbbb');
+  await expect(page.locator('#save')).toBeDisabled();
+
+  // Mod-s still saves in vim mode
+  await page.keyboard.press('i');
+  await page.keyboard.type('y');
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#save')).toBeEnabled();
+  await page.keyboard.press('ControlOrMeta+s');
+  await expect(page.locator('#save')).toBeDisabled();
+
+  // the choice survives a reload, and switching it off removes the block cursor
+  await page.reload();
+  await expect(page.locator('.cm-content')).toContainText('Shooting');
+  await expect(vim).toBeChecked();
+  await expect(mode).toHaveText('NORMAL');
+  await vim.uncheck();
+  await expect(mode).toBeHidden();
+  await expect(page.locator('.cm-fat-cursor')).toHaveCount(0);
+  expect(await page.evaluate(() => localStorage.getItem('editor-vim'))).toBe('0');
+});
+
+test.describe('dark scheme', () => {
+  test.use({ colorScheme: 'dark' });
+
+  test('editor: caret follows the text colour', async ({ page }) => {
+    await openEditor(page);
+    await page.locator('.cm-line', { hasText: 'never exceeds the magazine' }).click();
+    const c = await page.locator('.cm-content').evaluate((el) => {
+      const cs = getComputedStyle(el);
+      const rgb = (s: string) => s.match(/\d+/g)!.slice(0, 3).map(Number);
+      return {
+        caret: cs.caretColor,
+        text: cs.color,
+        caretLum: rgb(cs.caretColor).reduce((a, b) => a + b, 0) / 3,
+        bgLum: rgb(getComputedStyle(document.body).backgroundColor).reduce((a, b) => a + b, 0) / 3,
+      };
+    });
+    expect(c.caret).toBe(c.text);
+    expect(c.caret).not.toBe('rgb(0, 0, 0)');
+    expect(c.caretLum).toBeGreaterThan(c.bgLum + 100); // light caret on a dark background
+    // vim's insert-mode cursor is drawSelection's .cm-cursor: same colour rule
+    await page.locator('#vim').check();
+    await page.locator('.cm-content').click();
+    await page.keyboard.press('i');
+    const cur = await page
+      .locator('.cm-cursor.cm-cursor-primary')
+      .first()
+      .evaluate((el) => getComputedStyle(el).borderLeftColor);
+    expect(cur).toBe(c.text);
+    await page.keyboard.press('Escape');
+    await page.locator('#vim').uncheck();
+    await page.locator('h1').click(); // blur the editor so no cursor is in the shot
+    await expect(page).toHaveScreenshot('editor-dark.png');
+  });
+});

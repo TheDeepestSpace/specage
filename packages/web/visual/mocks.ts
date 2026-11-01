@@ -60,10 +60,12 @@ export async function mockApi(page: Page, o: MockOpts = {}) {
       return r.fulfill(
         json(o.initRepos ?? [{ repo: 'acme/new', private: false, initialised: false }]),
       );
-    if (/\/api\/r\/[^/]+\/[^/]+\/spec$/.test(u))
+    if (/\/api\/r\/[^/]+\/[^/]+\/spec$/.test(u)) {
+      if (r.request().method() === 'PUT') return r.fulfill(json({ head_sha: 'b'.repeat(40) }));
       return r.fulfill(
         json({ content: o.spec ?? SPEC, head_sha: 'a'.repeat(40), path: 'tbgwaf.specage' }),
       );
+    }
     if (/\/api\/r\/[^/]+\/[^/]+\/state$/.test(u)) return r.fulfill(json(STATE));
     return r.fulfill(json({ error: 'not mocked' }, 404));
   });
