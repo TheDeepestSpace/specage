@@ -20,6 +20,8 @@ export interface Marker {
 
 export interface SpecNode {
   id: string;
+  /** true when the statement has no explicit ID and `id` is a derived hash name */
+  derived: boolean;
   type: 'leaf' | 'block';
   marker: Marker | null;
   /** normalized own text (marker + prose), the hash input */

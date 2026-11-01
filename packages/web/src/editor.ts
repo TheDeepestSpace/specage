@@ -171,28 +171,6 @@ export async function renderEditor(root: HTMLElement, repo: string) {
           message: `${d.code}: ${d.message}`,
           source: 'specage',
         };
-        if (d.code === 'E002') {
-          diag.actions = [
-            {
-              name: 'Add ID',
-              apply(v, f) {
-                const text = v.state.doc.toString();
-                let i = f;
-                while (i < text.length && !(text[i] === ';' || text[i] === '{'))
-                  i += text[i] === '\\' ? 2 : 1;
-                const parent = enclosingBlockId(v.state.field(analysisField), f);
-                const base = `${parent ? parent + '.' : ''}${slug(text.slice(f, i))}`;
-                const taken = new Set(v.state.field(analysisField).nodes.map((n) => n.id));
-                let id = base,
-                  k = 2;
-                while (taken.has(id)) id = `${base}-${k++}`;
-                let at = i;
-                while (at > f && /\s/.test(text[at - 1])) at--;
-                v.dispatch({ changes: { from: at, insert: ` @${id}` } });
-              },
-            },
-          ];
-        }
         return diag;
       });
     },
