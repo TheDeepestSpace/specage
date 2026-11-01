@@ -1,5 +1,11 @@
-import { autocompletion, type CompletionContext } from '@codemirror/autocomplete';
-import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
+import {
+  acceptCompletion,
+  autocompletion,
+  completionKeymap,
+  type CompletionContext,
+  type CompletionResult,
+} from '@codemirror/autocomplete';
+import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands';
 import {
   codeFolding,
   foldGutter,
@@ -8,7 +14,7 @@ import {
   foldedRanges,
 } from '@codemirror/language';
 import { linter, lintGutter, type Diagnostic as CmDiag } from '@codemirror/lint';
-import { EditorState, StateEffect, StateField, type Range } from '@codemirror/state';
+import { EditorState, Prec, StateEffect, StateField, type Range } from '@codemirror/state';
 import {
   Decoration,
   EditorView,
@@ -179,7 +185,22 @@ export async function renderEditor(root: HTMLElement, repo: string) {
     { delay: 150 },
   );
 
-  const idCompletion = (ctx: CompletionContext) => {
+  // statement markers valid at the start of a statement
+  const markerOptions = [
+    { label: '!invariant:', detail: 'invariant', apply: '!invariant: ' },
+    { label: '!constraint:', detail: 'constraint', apply: '!constraint: ' },
+    { label: '!impl:', detail: 'implementation note', apply: '!impl: ' },
+    { label: '!proof', detail: 'proof (e.g. !proof video:)', apply: '!proof ' },
+    { label: '?', detail: 'open question' },
+    { label: '>later:', detail: 'deferred item' },
+  ].map((o) => ({ type: 'keyword', ...o }));
+  const markerCompletion = (ctx: CompletionContext): CompletionResult | null => {
+    const m = ctx.matchBefore(/(?<=(?:^|[;{}])\s*)[!?>][\w:]*/m);
+    if (!m) return null;
+    return { from: m.from, options: markerOptions, validFor: /^[!?>][\w:]*$/ };
+  };
+
+  const idCompletion = (ctx: CompletionContext): CompletionResult | null => {
     const m = ctx.matchBefore(/(?<!\\)@[a-z0-9_.-]*/);
     if (!m && !ctx.explicit) return null;
     const a = ctx.state.field(analysisField);
@@ -306,6 +327,7 @@ export async function renderEditor(root: HTMLElement, repo: string) {
     );
   };
 
+  let tabEscape = false;
   const view: EditorView = new EditorView({
     parent: editorEl,
     state: EditorState.create({
@@ -321,9 +343,26 @@ export async function renderEditor(root: HTMLElement, repo: string) {
         highlight,
         lintSource,
         lintGutter(),
-        autocompletion({ override: [idCompletion] }),
+        autocompletion({ override: [idCompletion, markerCompletion], defaultKeymap: true }),
         EditorView.lineWrapping,
+        // highest precedence: the completion keymap swallows Escape while its popup is open
+        Prec.highest(
+          EditorView.domEventHandlers({
+            // a11y escape hatch: Esc then Tab lets focus leave the editor
+            keydown(e) {
+              if (e.key === 'Escape') tabEscape = true;
+              else if (e.key !== 'Tab' && !e.key.startsWith('Shift')) tabEscape = false;
+              return false;
+            },
+          }),
+        ),
         keymap.of([
+          { key: 'Tab', run: acceptCompletion },
+          {
+            key: 'Tab',
+            run: (v) => (tabEscape ? false : indentWithTab.run!(v)),
+            shift: (v) => (tabEscape ? false : indentWithTab.shift!(v)),
+          },
           {
             key: 'Mod-s',
             run: () => {
@@ -332,6 +371,7 @@ export async function renderEditor(root: HTMLElement, repo: string) {
             },
           },
           ...foldKeymap,
+          ...completionKeymap,
           ...defaultKeymap,
           ...historyKeymap,
         ]),
