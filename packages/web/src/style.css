@@ -373,6 +373,33 @@ pre {
   min-width: 2.2ch;
   padding: 0 0.4rem 0 0.6rem;
 }
+/* CodeMirror defaults the caret/cursor to black; follow the scheme's text colour instead
+   (the native caret, drawSelection's .cm-cursor, and the drag-and-drop cursor). */
+.cm-editor .cm-scroller .cm-content {
+  caret-color: var(--fg);
+}
+.cm-editor .cm-scroller .cm-cursor,
+.cm-editor .cm-scroller .cm-dropCursor {
+  border-left-color: var(--fg);
+}
+.toggle {
+  display: inline-flex;
+  gap: 0.3rem;
+  align-items: center;
+  font-size: 0.85rem;
+  color: var(--mut);
+  cursor: pointer;
+  user-select: none;
+}
+.vim-mode {
+  font-family: ui-monospace, monospace;
+  font-size: 0.7rem;
+  padding: 0.05rem 0.45rem;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  color: var(--mut);
+  white-space: nowrap;
+}
 .pane {
   overflow: auto;
   padding: 0.75rem;
