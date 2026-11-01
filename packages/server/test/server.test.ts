@@ -194,6 +194,7 @@ describe('CSRF', () => {
     const r = await h.req('GET', '/healthz');
     expect(r.headers.get('content-security-policy')).toContain("default-src 'self'");
     expect(r.headers.get('content-security-policy')).toContain("frame-ancestors 'none'");
+    expect(r.headers.get('content-security-policy')).toContain("style-src 'self' 'unsafe-inline'");
     expect(r.headers.get('strict-transport-security')).toBeTruthy();
     expect(r.headers.get('x-content-type-options')).toBe('nosniff');
     expect(r.headers.get('referrer-policy')).toBe('no-referrer');
