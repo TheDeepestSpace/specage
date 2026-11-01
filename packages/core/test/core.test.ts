@@ -48,7 +48,25 @@ describe('lint', () => {
     expect(codes('a # b @x;\n c#d @y;')).toContain('E001');
     expect(codes('a @x { b @x.y; }')).toContain('E001');
   });
-  it('E002', () => expect(codes('a b;')).toContain('E002'));
+  it('E002 only for empty statements', () => {
+    expect(codes('a b;')).not.toContain('E002');
+    expect(codes(';')).toContain('E002');
+  });
+  it('derives stable hash names for ID-less statements', () => {
+    const a = parse('Hello  World;').roots[0];
+    const b = parse('hello world;').roots[0];
+    const c = parse('hello there;').roots[0];
+    expect(a.derived).toBe(true);
+    expect(a.id).toMatch(/^s-[0-9a-f]{8}$/);
+    expect(a.id).toBe(b.id);
+    expect(a.id).not.toBe(c.id);
+    expect(parse('a @x;').roots[0].derived).toBe(false);
+  });
+  it('disambiguates identical ID-less statements and skips anchor checks', () => {
+    const s = parse('a b; a b;');
+    expect(s.roots[0].id).not.toBe(s.roots[1].id);
+    expect(codes('a b; a b; c @p { d; };')).toEqual([]);
+  });
   it('E003', () => expect(codes('a @x; b @x;')).toContain('E003'));
   it('E004', () => expect(codes('a @x;', { retiredIds: ['x'] })).toContain('E004'));
   it('E005', () => {

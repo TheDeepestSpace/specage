@@ -115,10 +115,10 @@ test('trace pane follows the cursor and pins', async () => {
 test('lint is shown on the client and enforced by the server (422)', async () => {
   await page.locator('.cm-content').click();
   await page.keyboard.press('Control+End');
-  await page.keyboard.type('\nthis statement has no id;');
+  await page.keyboard.type('\nx @dup.id; y @dup.id;');
   await expect(page.locator('.cm-lintRange-error')).toBeVisible({ timeout: 3000 });
   await page.locator('#save').click();
-  await expect(page.locator('#diagnostics')).toContainText('E002');
+  await expect(page.locator('#diagnostics')).toContainText('E003');
   await expect(page.locator('#status')).toContainText('Not saved');
   // the server refuses it even when called directly
   const status = await page.evaluate(async () => {
@@ -127,7 +127,7 @@ test('lint is shown on the client and enforced by the server (422)', async () =>
     const r = await fetch('/api/r/o/r/spec', {
       method: 'PUT',
       headers: { 'x-specage': '1', 'x-csrf-token': me.csrf, 'content-type': 'application/json' },
-      body: JSON.stringify({ content: 'no id;', base_sha: cur.head_sha }),
+      body: JSON.stringify({ content: 'a @x; b @x;', base_sha: cur.head_sha }),
     });
     return r.status;
   });
