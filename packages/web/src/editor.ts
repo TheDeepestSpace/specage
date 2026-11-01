@@ -338,9 +338,7 @@ export async function renderEditor(root: HTMLElement, repo: string) {
       baseSha = r.head_sha;
       baseText = content;
       diagBox.replaceChildren();
-      say(
-        `Saved ${baseSha.slice(0, 7)}${r.dispatch ? `, dispatch issue #${r.dispatch.issue}` : ''}`,
-      );
+      say(`Saved ${baseSha.slice(0, 7)}`);
       refreshButtons();
       return true;
     } catch (e) {

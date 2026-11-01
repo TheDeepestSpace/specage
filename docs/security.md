@@ -35,8 +35,8 @@ Choose the final hostname before signing up: passkeys are bound to the RP ID.
 The server talks to one repository only: the data repo (`SPECAGE_DATA_REPO`) that holds every project's
 `specages/<project>/{spec,trail}` branches. It reaches GitHub only through `RealGitHub`, whose request wrapper refuses anything
 not in `ALLOWED` (`packages/server/src/github.ts`): installation lookup, token minting, reads of file contents/refs/commits,
-blob/tree/commit creation, a non-force update of `refs/heads/specages/*/spec`, and creation of refs (project branches, the `specage/dispatched/<project>` cursor), labels and issues on project repos.
-Data-repo installation tokens are limited to the data repo and `contents`; a second token (Issues write, Metadata read; no contents) is used for project repos (list repos, labels, dispatch issues). Both are cached in memory until 5 minutes before expiry, and never sent
+blob/tree/commit creation, a non-force update of `refs/heads/specages/*/spec`, and creation of refs (project branches), and labels on project repos. The server only reads the `specage/dispatched/<project>` cursor; the agent advances it.
+Data-repo installation tokens are limited to the data repo and `contents`; a second token (Issues write, Metadata read; no contents) is used for project repos (list repos, labels). Both are cached in memory until 5 minutes before expiry, and never sent
 to the browser (tested). Data-repo rulesets (created by hand; HUMAN-CONFIRM) can further limit the App to the
 `specages/*/spec` branches.
 

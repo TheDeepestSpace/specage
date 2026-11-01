@@ -12,7 +12,6 @@ import {
 import {
   ConfigSchema,
   diff,
-  summarize,
   hasErrors,
   lint,
   parse,
@@ -458,44 +457,6 @@ export function createApp({ env, db, github, now = Date.now }: Deps) {
     return null;
   };
 
-  /**
-   * A commit on the spec branch is a dispatch. The push webhook starts the-intern (worker side); this files the
-   * dispatch issue with the node-level diff from the cursor (last dispatched commit) and advances the cursor.
-   * Best effort: a failure never fails the save, and the cursor only moves after the issue exists.
-   */
-  async function fileDispatch(slug: string, project: string, path: string, sha: string) {
-    try {
-      const cursor = await github.getCursor(project);
-      const old = cursor ? await github.getFile(path, cursor) : null;
-      const text = (await github.getFile(path, sha)) ?? '';
-      const d = diff(old === null ? { roots: [], diagnostics: [] } : parse(old), parse(text));
-      if (cursor && !d.entries.length) {
-        await github.setCursor(project, sha);
-        return null;
-      }
-      const issue = await github.createIssue(slug, {
-        title: `specage dispatch ${sha.slice(0, 7)}`,
-        labels: ['specage-dispatch'],
-        body: [
-          `Dispatch commit \`${sha}\` on \`${env.dataRepo}\` (branch \`${specBranch(project)}\`; cursor: ${cursor ? `\`${cursor}\`` : 'none, diff from empty'})`,
-          '',
-          '```',
-          summarize(d),
-          '```',
-          '',
-          'Reply here with @the-intern-bot to answer questions that are not spec text.',
-        ].join('\n'),
-      });
-      await github.setCursor(project, sha);
-      db.audit('dispatch', slug, `${sha} #${issue}`);
-      return { issue, commit: sha };
-    } catch (e) {
-      db.audit('dispatch', slug, 'fail');
-      console.error(`dispatch issue failed for ${slug}: ${(e as Error).message}`);
-      return null;
-    }
-  }
-
   app.put('/api/r/:owner/:repo/spec', async (c) => {
     const { owner, repo } = c.req.param();
     const limited = rateLimit(c);
@@ -538,8 +499,7 @@ export function createApp({ env, db, github, now = Date.now }: Deps) {
         author: { name: env.authorName, email: env.authorEmail },
       });
       db.audit('save', `${owner}/${repo}`, 'ok');
-      const dispatch = await fileDispatch(`${owner}/${repo}`, repo, path, sha);
-      return c.json({ head_sha: sha, diagnostics: diags, dispatch });
+      return c.json({ head_sha: sha, diagnostics: diags });
     } catch (e) {
       if (e instanceof Conflict) {
         db.audit('save', `${owner}/${repo}`, '409');

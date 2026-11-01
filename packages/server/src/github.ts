@@ -36,14 +36,11 @@ export interface GitHub {
   getRef(ref: string): Promise<string | null>;
   /** last dispatched spec commit for a project (ref specage/dispatched/<project>), or null */
   getCursor(project: string): Promise<string | null>;
-  setCursor(project: string, sha: string): Promise<void>;
   /** repos the App installation can see (not limited to the data repo) */
   listInstallationRepos(): Promise<RepoInfo[]>;
   getRepo(repo: string): Promise<RepoInfo | null>;
   /** creates missing labels on a project repo; throws PermissionError without Issues access */
   ensureLabels(repo: string, labels: string[]): Promise<void>;
-  /** files an issue on a project repo, returns its number */
-  createIssue(repo: string, o: { title: string; body: string; labels: string[] }): Promise<number>;
   /** creates an orphan branch specages/<project>/<kind> with one commit; throws Conflict if it exists */
   createOrphanBranch(
     project: string,
@@ -83,12 +80,7 @@ export const ALLOWED: { method: string; auth: 'jwt' | 'install'; re: RegExp }[] 
   },
   { method: 'GET', auth: 'install', re: /^\/installation\/repositories\?per_page=\d+$/ },
   { method: 'GET', auth: 'install', re: new RegExp(`^/repos/${SEG}/${SEG}$`) },
-  { method: 'POST', auth: 'install', re: new RegExp(`^/repos/${SEG}/${SEG}/(labels|issues)$`) },
-  {
-    method: 'PATCH',
-    auth: 'install',
-    re: new RegExp(`^/repos/${SEG}/${SEG}/git/refs/specage/dispatched/${SEG}$`),
-  },
+  { method: 'POST', auth: 'install', re: new RegExp(`^/repos/${SEG}/${SEG}/labels$`) },
   {
     method: 'GET',
     auth: 'install',
@@ -266,14 +258,6 @@ export class RealGitHub implements GitHub {
     return this.getRef(`specage/dispatched/${project}`);
   }
 
-  async setCursor(project: string, sha: string) {
-    const ref = `specage/dispatched/${project}`;
-    const r = (await this.getRef(ref))
-      ? await this.repoReq('PATCH', `/git/refs/${ref}`, { sha, force: false })
-      : await this.repoReq('POST', '/git/refs', { ref: `refs/${ref}`, sha });
-    if (!r.ok) throw new Error(`GitHub ${r.status}`);
-  }
-
   async listInstallationRepos(): Promise<RepoInfo[]> {
     const r = await this.wideReq('GET', '/installation/repositories?per_page=100');
     if (!r.ok) throw new Error(`GitHub ${r.status}`);
@@ -300,14 +284,6 @@ export class RealGitHub implements GitHub {
         throw new PermissionError(`specage App cannot write labels on ${repo}: grant Issues write`);
       if (!r.ok) throw new Error(`GitHub ${r.status}`);
     }
-  }
-
-  async createIssue(repo: string, o: { title: string; body: string; labels: string[] }) {
-    const r = await this.wideReq('POST', `/repos/${repo}/issues`, o);
-    if (r.status === 403 || r.status === 404)
-      throw new PermissionError(`specage App cannot file issues on ${repo}: grant Issues write`);
-    if (!r.ok) throw new Error(`GitHub ${r.status}`);
-    return ((await r.json()) as any).number as number;
   }
 
   async createOrphanBranch(

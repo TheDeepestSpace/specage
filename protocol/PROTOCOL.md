@@ -10,12 +10,12 @@ Run the CLI with `npx --yes github:TheDeepestSpace/specage#v0 <cmd>` (call it `s
 ## Session
 
 1. Clone the data repo named in the dispatch message: `git clone --branch specages/<project>/spec <data_repo>` then `git fetch origin specages/<project>/trail --tags`. Read `.specage/config.yaml`, `.specage/policy.yaml` and `GRAMMAR.md` from the spec branch. Check out `specages/<project>/trail` in a separate worktree. The project's code repo is `repo` in the config; issues and PRs are filed there.
-2. In the data repo clone: `specage diff --from dispatch/latest --to <tag> --spec-file <spec_file> --project <project> --json`. If `entries` is empty, write the report and stop.
+2. **Cursor.** The cursor is the last spec commit already dispatched, stored in the data repo as the ref `refs/specage/dispatched/<project>` (not a branch). `<sha>` is the commit named in the dispatch message. Fetch it: `git fetch origin refs/specage/dispatched/<project>:refs/specage/dispatched/<project>` (if the ref does not exist, this is the first dispatch: diff from empty). Then: `specage diff --from <cursor> --to <sha> --spec-file <spec_file> --project <project> --json`. If `entries` is empty, advance the cursor (step 7) and stop.
 3. **Sync.** Scan PRs merged since the cursor for `Spec: <id>@<hash>` commit trailers or PR-body lines. Mark those claims `done`, set the work item to `merged`, add `pr` evidence to the trace.
 4. **Reconcile** every entry (ladder below).
 5. **Group** gaps into work items and file issues.
 6. Write `trace.yaml`, `work.yaml`, `questions.yaml`, `dispatches/<tag>.md` and any `outbox/` entries. Run `specage state validate`, then `specage state commit -m "dispatch <tag>"`. One commit per session.
-7. Post the report on the dispatch issue.
+7. Post the report where the dispatch was started, then **advance the cursor** only after everything above succeeded: `git push origin <sha>:refs/specage/dispatched/<project>` (create it if missing; fast-forward only, never force). If the session fails earlier, leave the cursor so the next dispatch re-diffs the same changes. The specage server never moves the cursor.
 
 ## Reconcile ladder
 

@@ -249,50 +249,19 @@ describe('API', () => {
     expect(stale.status).toBe(409);
     expect(((await stale.json()) as any).content).toContain('shoot.new');
   });
-  it('a save files a dispatch issue with the diff from the cursor, then advances the cursor', async () => {
+  it('a save commits to the spec branch and leaves the cursor alone', async () => {
     const h = harness();
     await h.signup(auth());
     const pv = (await (await h.req('GET', '/api/r/o/r/dispatch/preview')).json()) as any;
     expect(pv.cursor).toBeNull();
     expect(pv.diff.entries.map((e: any) => e.kind)).toEqual(['added', 'added']);
-    const r1 = await h.req('PUT', '/api/r/o/r/spec', {
+    const r = await h.req('PUT', '/api/r/o/r/spec', {
       content: SPEC0 + 'New thing @shoot.new;\n',
       base_sha: pv.head_sha,
     });
-    const j1 = (await r1.json()) as any;
-    expect(j1.dispatch.issue).toBe(1);
-    expect(h.github.cursor).toBe(j1.head_sha);
-    expect(h.github.issues[0]).toMatchObject({ repo: 'o/r', labels: ['specage-dispatch'] });
-    expect(h.github.issues[0].title).toBe(`specage dispatch ${j1.head_sha.slice(0, 7)}`);
-    expect(h.github.issues[0].body).toContain('none, diff from empty');
-    // second save: cursor is the previous commit
-    const r2 = await h.req('PUT', '/api/r/o/r/spec', {
-      content: SPEC0 + 'New thing @shoot.new;\nMore @shoot.more;\n',
-      base_sha: j1.head_sha,
-    });
-    expect(((await r2.json()) as any).dispatch.issue).toBe(2);
-    expect(h.github.issues[1].body).toContain(`cursor: \`${j1.head_sha}\``);
-    // a save that changes no nodes (whitespace) files nothing but still moves the cursor
-    const j2 = (await (
-      await h.req('PUT', '/api/r/o/r/spec', {
-        content: SPEC0 + 'New thing @shoot.new;\nMore @shoot.more;\n\n',
-        base_sha: h.github.head().sha,
-      })
-    ).json()) as any;
-    expect(j2.dispatch).toBeNull();
-    expect(h.github.issues).toHaveLength(2);
-    expect(h.github.cursor).toBe(j2.head_sha);
-  });
-  it('a failing issue does not fail the save and does not move the cursor', async () => {
-    const h = harness();
-    await h.signup(auth());
-    h.github.noIssuesPermission = true;
-    const r = await h.req('PUT', '/api/r/o/r/spec', {
-      content: SPEC0 + 'X @shoot.x;\n',
-      base_sha: h.github.head().sha,
-    });
+    const j = (await r.json()) as any;
     expect(r.status).toBe(200);
-    expect(((await r.json()) as any).dispatch).toBeNull();
+    expect(j.dispatch).toBeUndefined();
     expect(h.github.cursor).toBeNull();
   });
   it('init: lists repos, previews, creates idempotently, needs step-up and the right repo', async () => {
@@ -421,7 +390,6 @@ describe('GitHub access', () => {
       if (u.pathname === '/repos/o/x')
         return j({ full_name: 'o/x', private: true, default_branch: 'main' });
       if (u.pathname.endsWith('/labels')) return j({}, 201);
-      if (u.pathname.endsWith('/issues')) return j({ number: 7 }, 201);
       return j({ message: 'unexpected' }, 500);
     };
     return {
@@ -452,11 +420,9 @@ describe('GitHub access', () => {
     await gh.getFile('dir/a.specage', 'a'.repeat(40));
     await gh.getRef('heads/specages/r/spec');
     await gh.getCursor('r');
-    await gh.setCursor('r', 'a'.repeat(40));
     await gh.listInstallationRepos();
     await gh.getRepo('o/x');
     await gh.ensureLabels('o/x', ['specage']);
-    expect(await gh.createIssue('o/x', { title: 't', body: 'b', labels: [] })).toBe(7);
     await gh.createOrphanBranch('new', 'spec', { 'a.txt': 'x' }, 'm');
     await gh.commitSpec('r', {
       path: 'a.specage',

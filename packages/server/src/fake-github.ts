@@ -19,7 +19,6 @@ export class FakeGitHub implements GitHub {
     { full_name: 'o/new', private: false, default_branch: 'main' },
   ];
   labels: string[] = [];
-  issues: { repo: string; title: string; body: string; labels: string[] }[] = [];
   /** set to make repo-level calls fail as if the App lacked Issues access */
   noIssuesPermission = false;
   created: Record<string, Record<string, string>> = {};
@@ -54,9 +53,6 @@ export class FakeGitHub implements GitHub {
   async getCursor() {
     return this.cursor;
   }
-  async setCursor(_p: string, sha: string) {
-    this.cursor = sha;
-  }
   async listInstallationRepos() {
     return this.repos;
   }
@@ -66,11 +62,6 @@ export class FakeGitHub implements GitHub {
   async ensureLabels(_r: string, labels: string[]) {
     if (this.noIssuesPermission) throw new PermissionError('grant Issues write');
     this.labels.push(...labels);
-  }
-  async createIssue(repo: string, o: { title: string; body: string; labels: string[] }) {
-    if (this.noIssuesPermission) throw new PermissionError('grant Issues write');
-    this.issues.push({ repo, ...o });
-    return this.issues.length;
   }
   async createOrphanBranch(project: string, kind: 'spec' | 'trail', files: Record<string, string>) {
     const b = `specages/${project}/${kind}`;
