@@ -260,11 +260,89 @@ pre {
   height: calc(100vh - var(--top-h, 3.4rem));
   min-height: 0;
 }
+.editor-col {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  border-right: 1px solid var(--line);
+}
+.editor-col [hidden] {
+  display: none;
+}
+.tabs {
+  display: flex;
+  gap: 0.25rem;
+  padding: 0.25rem 0.5rem 0;
+  border-bottom: 1px solid var(--line);
+  background: var(--card);
+}
+.tabs button {
+  background: none;
+  border: 1px solid transparent;
+  border-bottom: 0;
+  border-radius: 4px 4px 0 0;
+  color: var(--mut);
+  padding: 0.25rem 0.75rem;
+  cursor: pointer;
+}
+.tabs button[aria-selected='true'] {
+  background: var(--bg);
+  border-color: var(--line);
+  color: var(--fg);
+  margin-bottom: -1px;
+}
 .editor-host {
+  flex: 1;
   min-width: 0;
   min-height: 0;
   overflow: hidden; /* CodeMirror scrolls inside .cm-scroller */
-  border-right: 1px solid var(--line);
+}
+.grammar-host {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 0.5rem 1.25rem 2rem;
+  line-height: 1.55;
+}
+.md h1,
+.md h2 {
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 0.25rem;
+}
+.md a {
+  color: var(--acc);
+}
+.md code {
+  background: var(--card);
+  border-radius: 3px;
+  padding: 0.1em 0.3em;
+  font-size: 0.9em;
+}
+.md pre {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 0.75rem;
+  overflow: auto;
+}
+.md pre code {
+  background: none;
+  padding: 0;
+}
+.md table {
+  border-collapse: collapse;
+  display: block;
+  overflow-x: auto;
+}
+.md th,
+.md td {
+  border: 1px solid var(--line);
+  padding: 0.3rem 0.6rem;
+  text-align: left;
+}
+.md th {
+  background: var(--card);
 }
 .editor-host .cm-editor {
   height: 100%;
@@ -393,9 +471,10 @@ dialog.conflict {
     grid-template-rows: 60vh auto;
     height: auto;
   }
-  .editor-host {
+  .editor-col {
     border-right: 0;
     border-bottom: 1px solid var(--line);
+    height: 60vh;
   }
   .cols {
     grid-template-columns: 1fr;
