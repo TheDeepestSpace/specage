@@ -14,7 +14,14 @@ import {
   foldedRanges,
 } from '@codemirror/language';
 import { linter, lintGutter, type Diagnostic as CmDiag } from '@codemirror/lint';
-import { Compartment, EditorState, Prec, StateEffect, StateField, type Range } from '@codemirror/state';
+import {
+  Compartment,
+  EditorState,
+  Prec,
+  StateEffect,
+  StateField,
+  type Range,
+} from '@codemirror/state';
 import {
   Decoration,
   EditorView,
