@@ -25,6 +25,8 @@ import { api, ApiError, loadMe } from './api.js';
 import { analyse, dotStatus, nodeAtLine, slug, type Analysis } from './analysis.js';
 import { conflictDialog } from './conflict.js';
 import { h, store } from './dom.js';
+import grammarSrc from '../../../protocol/GRAMMAR.md?raw';
+import { renderMarkdown } from './markdown.js';
 import { renderPane } from './tracepane.js';
 import { aggregateText } from './viewer.js';
 
@@ -207,6 +209,52 @@ export async function renderEditor(root: HTMLElement, repo: string) {
   const diagBox = h('ul', { id: 'diagnostics', class: 'diags' });
   const paneEl = h('aside', { id: 'pane', class: 'pane' });
   const editorEl = h('div', { id: 'editor', class: 'editor-host' });
+  // Tabs: the CodeMirror view stays mounted (just hidden) so edits/cursor survive switching.
+  const grammarEl = h('article', {
+    id: 'grammar',
+    class: 'grammar-host',
+    role: 'tabpanel',
+    'aria-labelledby': 'tab-grammar',
+    hidden: true,
+  });
+  grammarEl.append(renderMarkdown(grammarSrc));
+  const specTab = h(
+    'button',
+    {
+      id: 'tab-spec',
+      role: 'tab',
+      'aria-selected': 'true',
+      'aria-controls': 'editor',
+    },
+    'Spec',
+  );
+  const grammarTab = h(
+    'button',
+    {
+      id: 'tab-grammar',
+      role: 'tab',
+      'aria-selected': 'false',
+      'aria-controls': 'grammar',
+    },
+    'GRAMMAR.md',
+  );
+  const selectTab = (which: 'spec' | 'grammar') => {
+    const spec = which === 'spec';
+    specTab.setAttribute('aria-selected', String(spec));
+    grammarTab.setAttribute('aria-selected', String(!spec));
+    editorEl.hidden = !spec;
+    grammarEl.hidden = spec;
+    if (spec) view.focus();
+  };
+  specTab.addEventListener('click', () => selectTab('spec'));
+  grammarTab.addEventListener('click', () => selectTab('grammar'));
+  const editorCol = h(
+    'div',
+    { class: 'editor-col' },
+    h('div', { class: 'tabs', role: 'tablist' }, specTab, grammarTab),
+    editorEl,
+    grammarEl,
+  );
   root.replaceChildren(
     h(
       'header',
@@ -217,7 +265,7 @@ export async function renderEditor(root: HTMLElement, repo: string) {
       saveBtn,
     ),
     diagBox,
-    h('div', { class: 'split' }, editorEl, paneEl),
+    h('div', { class: 'split' }, editorCol, paneEl),
   );
 
   // the split fills the viewport below the (possibly wrapped) header

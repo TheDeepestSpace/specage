@@ -98,6 +98,28 @@ test('editor: gutter dots follow the trace, live hashing marks edits stale', asy
   await expect(page.locator('.dot[data-status="verified"]')).toHaveCount(1);
 });
 
+test('GRAMMAR.md tab is rendered, read-only, and keeps spec edits', async () => {
+  await page.goto('/r/o/r');
+  await expect(page.locator('.cm-content')).toContainText('Limit magazine');
+  await page.locator('.cm-line', { hasText: 'Limit magazine' }).click();
+  await page.keyboard.press('Home');
+  await page.keyboard.type('Q');
+  await page.getByRole('tab', { name: 'GRAMMAR.md' }).click();
+  const g = page.locator('#grammar');
+  await expect(g).toBeVisible();
+  await expect(page.locator('#editor')).toBeHidden();
+  await expect(g.getByRole('heading', { name: 'The specage language', level: 1 })).toBeVisible();
+  await expect(g.getByRole('heading', { name: 'Markers', level: 2 })).toBeVisible();
+  await expect(g.locator('table').first()).toBeVisible();
+  await expect(g.locator('pre')).not.toHaveCount(0);
+  expect(await g.locator('.cm-editor, [contenteditable], input, textarea').count()).toBe(0);
+  await page.getByRole('tab', { name: 'Spec' }).click();
+  await expect(page.locator('.cm-line', { hasText: 'QLimit magazine' })).toBeVisible();
+  await expect(page.locator('#save')).toBeEnabled();
+  await page.keyboard.press('Control+z'); // restore for later tests
+  await expect(page.locator('#save')).toBeDisabled();
+});
+
 test('trace pane follows the cursor and pins', async () => {
   await page.locator('.cm-line', { hasText: 'Limit magazine' }).click();
   await expect(page.locator('#crumbs strong')).toHaveText('shoot.cap', { timeout: 3000 });
