@@ -43,3 +43,16 @@ jobs:
     steps:
       - id: d
         uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
+  deploy:
+    needs: test
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: fly-deploy
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: superfly/flyctl-actions/setup-flyctl@fc53c09e1bc3be6f54706524e3b82c4f462f77be # 1.5
+      - run: flyctl deploy --remote-only --config deploy/fly.toml --app "${{ vars.FLY_APP || 'specage' }}"
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLYIO_SPECAGE_ORG_TOKEN }}

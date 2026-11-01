@@ -1,8 +1,5 @@
-name: Deploy to Fly
+name: Deploy to Fly (manual; automatic deploy is the deploy job in ci.yml)
 on:
-  push:
-    branches: [main]
-    paths: ['packages/core/**', 'packages/web/**', 'packages/server/**', 'deploy/**', 'Dockerfile']
   workflow_dispatch:
 permissions:
   contents: read
