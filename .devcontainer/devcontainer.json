@@ -1,9 +1,23 @@
 {
   "name": "specage",
-  "build": { "dockerfile": "../Dockerfile", "target": "dev", "context": ".." },
+  "build": {
+    "dockerfile": "../Dockerfile",
+    "target": "dev",
+    "context": ".."
+  },
   "remoteUser": "dev",
   "postCreateCommand": "npm ci",
   "forwardPorts": [5173, 8080],
-  "portsAttributes": { "5173": { "label": "Vite" }, "8080": { "label": "specage server" } },
-  "containerEnv": { "PLAYWRIGHT_BROWSERS_PATH": "/ms-playwright" }
+  "portsAttributes": {
+    "5173": {
+      "label": "Vite"
+    },
+    "8080": {
+      "label": "specage server"
+    }
+  },
+  "containerEnv": {
+    "PLAYWRIGHT_BROWSERS_PATH": "/ms-playwright"
+  },
+  "postStartCommand": "bash -c '.devcontainer/scripts/post-start.sh ${containerWorkspaceFolder}'"
 }

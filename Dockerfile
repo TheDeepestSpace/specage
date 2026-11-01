@@ -27,7 +27,7 @@ RUN (userdel -r ubuntu 2>/dev/null || true) \
     && usermod --append --groups sudo dev \
     && echo '%sudo ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
 ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
-RUN mkdir -p /__w /github/workspace && chmod -R 777 /__w /github 2>/dev/null || true
+RUN mkdir -p /__w /github/workspace /tmp && chmod -R 777 /__w /github /tmp 2>/dev/null || true
 ENTRYPOINT ["/usr/bin/dumb-init", "--"]
 USER dev
 WORKDIR /home/dev
