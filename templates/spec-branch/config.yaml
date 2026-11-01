@@ -1,4 +1,4 @@
-# specage configuration (written by `specage install`, edit by hand on the spec branch)
+# specage configuration (written by the server's project init, edit by hand on the spec branch)
 specage_version: {{specage_version}}
 project: {{project}}
 repo: {{repo}}

@@ -21,7 +21,7 @@ import {
   type ViewUpdate,
 } from '@codemirror/view';
 import { diff as coreDiff, lint, parse, type State } from '@specage/core/browser';
-import { api, ApiError, loadMe, passkeyLogin } from './api.js';
+import { api, ApiError, loadMe } from './api.js';
 import { analyse, dotStatus, nodeAtLine, slug, type Analysis } from './analysis.js';
 import { conflictDialog } from './conflict.js';
 import { h, store } from './dom.js';
@@ -226,7 +226,6 @@ export async function renderEditor(root: HTMLElement, repo: string) {
   // ---- layout ----
   const status = h('span', { id: 'status', class: 'status', role: 'status' });
   const saveBtn = h('button', { id: 'save', disabled: true }, 'Save') as HTMLButtonElement;
-  const dispatchBtn = h('button', { id: 'dispatch' }, 'Dispatch…') as HTMLButtonElement;
   const diagBox = h('ul', { id: 'diagnostics', class: 'diags' });
   const paneEl = h('aside', { id: 'pane', class: 'pane' });
   const editorEl = h('div', { id: 'editor', class: 'editor-host' });
@@ -238,7 +237,6 @@ export async function renderEditor(root: HTMLElement, repo: string) {
       h('a', { href: '/' }, 'repos'),
       status,
       saveBtn,
-      dispatchBtn,
     ),
     diagBox,
     h('div', { class: 'split' }, editorEl, paneEl),
@@ -247,7 +245,6 @@ export async function renderEditor(root: HTMLElement, repo: string) {
   const dirty = () => view.state.doc.toString() !== baseText;
   const refreshButtons = () => {
     saveBtn.disabled = !dirty();
-    dispatchBtn.title = dirty() ? 'Save your changes first' : '';
   };
 
   let paneTimer: number | undefined;
@@ -373,69 +370,6 @@ export async function renderEditor(root: HTMLElement, repo: string) {
     }
   }
   saveBtn.addEventListener('click', () => void save());
-
-  // ---- dispatch ----
-  dispatchBtn.addEventListener('click', async () => {
-    if (dirty()) {
-      say('Save your changes before dispatching', true);
-      return;
-    }
-    try {
-      const pv = await api('GET', `/api/r/${repo}/dispatch/preview`);
-      const entries: any[] = pv.diff.entries;
-      const d = h('dialog', { id: 'dispatch-dialog' });
-      const close = () => {
-        d.close();
-        d.remove();
-      };
-      d.append(
-        h('h2', {}, 'Dispatch'),
-        h(
-          'p',
-          {},
-          pv.cursor
-            ? `Changes since ${pv.cursor}`
-            : 'First dispatch: every node goes through discovery.',
-        ),
-        h(
-          'ul',
-          { id: 'preview' },
-          ...(entries.length
-            ? entries.map((e) => h('li', {}, `${e.kind} ${e.id ?? e.from ?? ''}`))
-            : [h('li', {}, 'No changes')]),
-        ),
-        h(
-          'div',
-          { class: 'actions' },
-          h(
-            'button',
-            {
-              id: 'confirm-dispatch',
-              onclick: async () => {
-                try {
-                  await passkeyLogin(); // step-up: a dispatch starts paid agent runs
-                  const r = await api('POST', `/api/r/${repo}/dispatch`, {
-                    expected_head: pv.head_sha,
-                  });
-                  close();
-                  say(`Dispatched ${r.tag}`);
-                } catch (e: any) {
-                  close();
-                  say(`Dispatch failed: ${e.message}`, true);
-                }
-              },
-            },
-            'Confirm dispatch',
-          ),
-          h('button', { onclick: close }, 'Cancel'),
-        ),
-      );
-      document.body.append(d);
-      d.showModal();
-    } catch (e: any) {
-      say(`Preview failed: ${e.message}`, true);
-    }
-  });
 
   store.set('last-repo', repo);
   // keep the unused import honest for tree shaking

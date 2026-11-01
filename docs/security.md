@@ -25,7 +25,7 @@ Choose the final hostname before signing up: passkeys are bound to the RP ID.
 - Every non-GET request needs a matching `Origin` and `X-Specage: 1`. Authenticated routes also need the per-session CSRF token
   (`X-CSRF-Token`, delivered by `/api/me` and `/auth/login/verify`). Unauthenticated auth routes (login/sign-up) cannot have a
   session token yet, so they rely on Origin + custom header + `SameSite=Strict` + the sealed challenge cookie.
-- Dispatch needs a passkey assertion in the last 5 minutes. The SPA always asserts right before it POSTs.
+- Adding a project (`POST /api/init`) needs a passkey assertion in the last 5 minutes. The SPA always asserts right before it POSTs. Saves dispatch by commit and are rate limited (60 writes/hour).
 - Add-device: a signed-in session with a fresh assertion mints a single-use link (10 min). Redeeming it opens a registration window.
   (The handoff wording, "its use requires a passkey assertion first", is read as the minting side: the new device has no passkey yet.)
 - Signature counter: enforced by the WebAuthn library whenever either side is non-zero; authenticators that always report 0 work.
@@ -35,10 +35,10 @@ Choose the final hostname before signing up: passkeys are bound to the RP ID.
 The server talks to one repository only: the data repo (`SPECAGE_DATA_REPO`) that holds every project's
 `specages/<project>/{spec,trail}` branches. It reaches GitHub only through `RealGitHub`, whose request wrapper refuses anything
 not in `ALLOWED` (`packages/server/src/github.ts`): installation lookup, token minting, reads of file contents/refs/commits,
-blob/tree/commit creation, a non-force update of `refs/heads/specages/*/spec`, and creation of `refs/tags/dispatch/*`-style refs.
-Installation tokens are limited to the data repo and `contents`, cached in memory until 5 minutes before expiry, and never sent
-to the browser (tested). Data-repo rulesets (`specage install --rulesets`, HUMAN-CONFIRM) further limit the App to the
-`specages/*/spec` branches and `dispatch/*` tags.
+blob/tree/commit creation, a non-force update of `refs/heads/specages/*/spec`, and creation of refs (project branches), and labels on project repos. The server only reads the `specage/dispatched/<project>` cursor; the agent advances it.
+Data-repo installation tokens are limited to the data repo and `contents`; a second token (Issues write, Metadata read; no contents) is used for project repos (list repos, labels). Both are cached in memory until 5 minutes before expiry, and never sent
+to the browser (tested). Data-repo rulesets (created by hand; HUMAN-CONFIRM) can further limit the App to the
+`specages/*/spec` branches.
 
 `DEV_GITHUB_TOKEN` is refused unless `NODE_ENV=development`.
 

@@ -22,7 +22,15 @@ import {
 import YAML from 'yaml';
 import type { Db } from './db.js';
 import type { Env } from './env.js';
-import { Conflict, NotFound, specBranch, trailBranch, type GitHub } from './github.js';
+import {
+  Conflict,
+  NotFound,
+  PermissionError,
+  specBranch,
+  trailBranch,
+  type GitHub,
+} from './github.js';
+import { BadInit, planInit, runInit } from './init.js';
 import { safeEqual, seal, unseal } from './seal.js';
 import {
   SIGNUP_PURPOSE,
@@ -514,39 +522,65 @@ export function createApp({ env, db, github, now = Date.now }: Deps) {
     const head = await github.getRef(`heads/${specBranch(repo)}`);
     const headText = head ? await github.getFile(path, specBranch(repo)) : null;
     if (!head || headText === null) return c.json({ error: 'spec file not found' }, 404);
-    const tags = await github.listDispatchTags(repo);
-    const cursor = tags.length ? tags[tags.length - 1] : null;
+    const cursor = await github.getCursor(repo);
     const old = cursor ? await github.getFile(path, cursor) : null;
     const d = diff(old === null ? { roots: [], diagnostics: [] } : parse(old), parse(headText));
     return c.json({ cursor, head_sha: head, diff: d, nodes: flatten(parse(headText)).length });
   });
 
-  app.post('/api/r/:owner/:repo/dispatch', async (c) => {
-    const { owner, repo } = c.req.param();
+  // ---- project init (owner session; the App installation token does the work) ----
+  const initEnv = {
+    dataRepo: env.dataRepo,
+    internRepo: env.internRepo,
+    uiUrl: env.publicUrl,
+  };
+  const initError = (c: Context, e: unknown) => {
+    if (e instanceof BadInit) return c.json({ error: e.message }, 400);
+    if (e instanceof PermissionError) return c.json({ error: e.message }, 403);
+    throw e;
+  };
+  app.get('/api/init/repos', async (c) => {
+    try {
+      await github.assertInstalled();
+      const taken = new Set(await github.listProjects());
+      const repos = (await github.listInstallationRepos())
+        .filter((r) => r.full_name !== env.dataRepo)
+        .map((r) => ({
+          repo: r.full_name,
+          private: r.private,
+          initialised: taken.has(r.full_name.split('/')[1]),
+        }));
+      return c.json(repos);
+    } catch (e) {
+      if (e instanceof NotFound)
+        return c.json({ error: 'specage App is not installed on the data repo' }, 404);
+      return initError(c, e);
+    }
+  });
+  app.post('/api/init/preview', async (c) => {
+    const body = await c.req.json().catch(() => null);
+    if (!body) return c.json({ error: 'json body required' }, 400);
+    try {
+      return c.json(await planInit(github, initEnv, body));
+    } catch (e) {
+      return initError(c, e);
+    }
+  });
+  app.post('/api/init', async (c) => {
     const limited = rateLimit(c);
     if (limited) return limited;
     const bad = requireStepUp(c);
     if (bad) return bad;
     const body = await c.req.json().catch(() => null);
-    if (!body || typeof body.expected_head !== 'string')
-      return c.json({ error: 'expected_head required' }, 400);
-    const head = await github.getRef(`heads/${specBranch(repo)}`);
-    if (head !== body.expected_head)
-      return c.json({ error: 'spec head moved', head_sha: head }, 409);
-    const d = new Date(now());
-    const tag = `dispatch/${repo}/${d.toISOString().slice(0, 16).replace(':', '-')}Z`;
+    if (!body) return c.json({ error: 'json body required' }, 400);
     try {
-      await github.createTag(tag, head!);
+      const plan = await runInit(github, initEnv, body);
+      db.audit('init', plan.repo, 'ok');
+      return c.json(plan);
     } catch (e) {
-      if (e instanceof Conflict)
-        return c.json(
-          { error: 'a dispatch tag for this minute already exists; retry in a minute' },
-          409,
-        );
-      throw e;
+      db.audit('init', String(body.repo ?? ''), 'fail');
+      return initError(c, e);
     }
-    db.audit('dispatch', `${owner}/${repo}`, tag);
-    return c.json({ tag });
   });
 
   // ---- SPA ----

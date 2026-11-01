@@ -13,6 +13,14 @@ export function normalizePem(raw: string): string {
 
 export class Conflict extends Error {}
 export class NotFound extends Error {}
+/** The App lacks a permission or access to a repo; the message says what to grant. */
+export class PermissionError extends Error {}
+
+export interface RepoInfo {
+  full_name: string;
+  private: boolean;
+  default_branch: string;
+}
 
 export const specBranch = (project: string) => `specages/${project}/spec`;
 export const trailBranch = (project: string) => `specages/${project}/trail`;
@@ -24,9 +32,22 @@ export interface GitHub {
   /** throws NotFound unless the specage App is installed on the data repo */
   assertInstalled(): Promise<void>;
   getFile(path: string, ref: string): Promise<string | null>;
-  /** commit sha at a ref such as "heads/specages/x/spec" or "tags/dispatch/x/..." */
+  /** commit sha at a ref such as "heads/specages/x/spec" */
   getRef(ref: string): Promise<string | null>;
-  listDispatchTags(project: string): Promise<string[]>;
+  /** last dispatched spec commit for a project (ref specage/dispatched/<project>), or null */
+  getCursor(project: string): Promise<string | null>;
+  /** repos the App installation can see (not limited to the data repo) */
+  listInstallationRepos(): Promise<RepoInfo[]>;
+  getRepo(repo: string): Promise<RepoInfo | null>;
+  /** creates missing labels on a project repo; throws PermissionError without Issues access */
+  ensureLabels(repo: string, labels: string[]): Promise<void>;
+  /** creates an orphan branch specages/<project>/<kind> with one commit; throws Conflict if it exists */
+  createOrphanBranch(
+    project: string,
+    kind: 'spec' | 'trail',
+    files: Record<string, string>,
+    message: string,
+  ): Promise<string>;
   /** non-force commit onto the project's spec branch; throws Conflict if the branch moved */
   commitSpec(
     project: string,
@@ -38,7 +59,6 @@ export interface GitHub {
       author: { name: string; email: string };
     },
   ): Promise<string>;
-  createTag(tag: string, sha: string): Promise<void>;
 }
 
 export type Fetch = (url: string, init?: RequestInit) => Promise<Response>;
@@ -56,17 +76,15 @@ export const ALLOWED: { method: string; auth: 'jwt' | 'install'; re: RegExp }[] 
   {
     method: 'GET',
     auth: 'install',
-    re: new RegExp(`^/repos/${SEG}/${SEG}/git/ref/(heads|tags)/[^?]+$`),
+    re: new RegExp(`^/repos/${SEG}/${SEG}/git/ref/(heads|tags|specage/dispatched)/[^?]+$`),
   },
+  { method: 'GET', auth: 'install', re: /^\/installation\/repositories\?per_page=\d+$/ },
+  { method: 'GET', auth: 'install', re: new RegExp(`^/repos/${SEG}/${SEG}$`) },
+  { method: 'POST', auth: 'install', re: new RegExp(`^/repos/${SEG}/${SEG}/labels$`) },
   {
     method: 'GET',
     auth: 'install',
     re: new RegExp(`^/repos/${SEG}/${SEG}/git/matching-refs/heads/specages/$`),
-  },
-  {
-    method: 'GET',
-    auth: 'install',
-    re: new RegExp(`^/repos/${SEG}/${SEG}/git/matching-refs/tags/dispatch/${SEG}/$`),
   },
   {
     method: 'GET',
@@ -169,6 +187,35 @@ export class RealGitHub implements GitHub {
     return j.token;
   }
 
+  /**
+   * Token for project repos: Issues write + metadata read across the installation (not the data repo's
+   * contents). Fails with PermissionError when the App was not granted Issues access.
+   */
+  private async wideToken(): Promise<string> {
+    if (this.o.devToken) return this.o.devToken;
+    const c = this.tokens.get('wide');
+    if (c && c.exp - 5 * 60_000 > this.now()) return c.token;
+    const id = await this.installationId();
+    const r = await this.req(
+      'POST',
+      `/app/installations/${id}/access_tokens`,
+      { kind: 'jwt' },
+      { permissions: { issues: 'write', metadata: 'read' } },
+    );
+    if (r.status === 422 || r.status === 403)
+      throw new PermissionError(
+        'specage App needs "Issues: read & write" (and Metadata: read) to be granted on the installation',
+      );
+    if (!r.ok) throw new Error(`GitHub token mint failed: ${r.status}`);
+    const j = (await r.json()) as any;
+    this.tokens.set('wide', { token: j.token, exp: Date.parse(j.expires_at) });
+    return j.token;
+  }
+
+  private async wideReq(method: string, path: string, body?: unknown) {
+    return this.req(method, path, { kind: 'install', token: await this.wideToken() }, body);
+  }
+
   private async repoReq(method: string, sub: string, body?: unknown) {
     const token = await this.repoToken();
     return this.req(method, `/repos/${this.o.dataRepo}${sub}`, { kind: 'install', token }, body);
@@ -207,10 +254,74 @@ export class RealGitHub implements GitHub {
     return j.object.sha;
   }
 
-  async listDispatchTags(project: string): Promise<string[]> {
-    const r = await this.repoReq('GET', `/git/matching-refs/tags/dispatch/${project}/`);
+  async getCursor(project: string) {
+    return this.getRef(`specage/dispatched/${project}`);
+  }
+
+  async listInstallationRepos(): Promise<RepoInfo[]> {
+    const r = await this.wideReq('GET', '/installation/repositories?per_page=100');
     if (!r.ok) throw new Error(`GitHub ${r.status}`);
-    return ((await r.json()) as any[]).map((x) => x.ref.replace(/^refs\/tags\//, '')).sort();
+    return ((await r.json()) as any).repositories.map((x: any) => ({
+      full_name: x.full_name,
+      private: !!x.private,
+      default_branch: x.default_branch,
+    }));
+  }
+
+  async getRepo(repo: string): Promise<RepoInfo | null> {
+    const r = await this.wideReq('GET', `/repos/${repo}`);
+    if (r.status === 404) return null;
+    if (!r.ok) throw new Error(`GitHub ${r.status}`);
+    const x = (await r.json()) as any;
+    return { full_name: x.full_name, private: !!x.private, default_branch: x.default_branch };
+  }
+
+  async ensureLabels(repo: string, labels: string[]) {
+    for (const name of labels) {
+      const r = await this.wideReq('POST', `/repos/${repo}/labels`, { name, color: '5319e7' });
+      if (r.status === 422) continue; // already exists
+      if (r.status === 403 || r.status === 404)
+        throw new PermissionError(`specage App cannot write labels on ${repo}: grant Issues write`);
+      if (!r.ok) throw new Error(`GitHub ${r.status}`);
+    }
+  }
+
+  async createOrphanBranch(
+    project: string,
+    kind: 'spec' | 'trail',
+    files: Record<string, string>,
+    message: string,
+  ) {
+    const branch = kind === 'spec' ? specBranch(project) : trailBranch(project);
+    if (await this.getRef(`heads/${branch}`)) throw new Conflict('branch exists');
+    const must = async (r: Response) => {
+      if (!r.ok) throw new Error(`GitHub ${r.status}`);
+      return (await r.json()) as any;
+    };
+    const tree: { path: string; mode: string; type: string; sha: string }[] = [];
+    for (const [path, content] of Object.entries(files)) {
+      const blob = await must(
+        await this.repoReq('POST', '/git/blobs', { content, encoding: 'utf-8' }),
+      );
+      tree.push({ path, mode: '100644', type: 'blob', sha: blob.sha });
+    }
+    const t = await must(await this.repoReq('POST', '/git/trees', { tree }));
+    const author = { name: 'specage', email: 'specage@users.noreply.github.com' };
+    const commit = await must(
+      await this.repoReq('POST', '/git/commits', {
+        message,
+        tree: t.sha,
+        parents: [],
+        author: { ...author, date: new Date(this.now()).toISOString() },
+      }),
+    );
+    const u = await this.repoReq('POST', '/git/refs', {
+      ref: `refs/heads/${branch}`,
+      sha: commit.sha,
+    });
+    if (u.status === 422) throw new Conflict('branch exists');
+    await must(u);
+    return commit.sha as string;
   }
 
   async commitSpec(
@@ -252,11 +363,5 @@ export class RealGitHub implements GitHub {
     if (u.status === 422) throw new Conflict('spec moved');
     await must(u);
     return commit.sha as string;
-  }
-
-  async createTag(tag: string, sha: string) {
-    const r = await this.repoReq('POST', '/git/refs', { ref: `refs/tags/${tag}`, sha });
-    if (r.status === 422) throw new Conflict('tag exists');
-    if (!r.ok) throw new Error(`GitHub ${r.status}`);
   }
 }

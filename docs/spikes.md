@@ -9,6 +9,8 @@ nothing in P3 should be treated as proven until these are recorded here.
 Run them with a throwaway project repo (`specage-sandbox`) and a throwaway data repo (`specage-data-sandbox`).
 Record the date, the result, and the evidence URL under each heading.
 
+> Superseded: spikes 1 and 2 covered the tag/workflow dispatch and the CLI `install`, both removed (project init is in the web UI, dispatch is commit-driven via the worker). The cursor ref `refs/specage/dispatched/<project>` created with an installation token still needs one real-GitHub check.
+
 ## 1. Workflow on an orphan branch of the data repo runs for `push` and for tags pushed onto its commits
 
 ```sh

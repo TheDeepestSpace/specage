@@ -140,6 +140,7 @@ export function testEnv(ownerPubkey: string): Env {
     authorName: 'Owner',
     authorEmail: 'o@example.com',
     dataRepo: 'o/specage-data',
+    internRepo: 'o/the-intern',
     dbPath: ':memory:',
     webDist: '/nonexistent',
   };

@@ -31,6 +31,8 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends python3 build-essential && rm -rf /var/lib/apt/lists/*
 COPY package.json package-lock.json tsconfig.base.json ./
 COPY packages ./packages
+COPY templates ./templates
+COPY protocol ./protocol
 RUN npm ci
 RUN npx tsc -b packages/core packages/server && npm run build -w @specage/web
 RUN npm prune --omit=dev
@@ -45,6 +47,8 @@ COPY --from=build --chown=node:node /app/packages/core/dist ./packages/core/dist
 COPY --from=build --chown=node:node /app/packages/server/package.json ./packages/server/package.json
 COPY --from=build --chown=node:node /app/packages/server/dist ./packages/server/dist
 COPY --from=build --chown=node:node /app/packages/web/dist ./packages/web/dist
+COPY --from=build --chown=node:node /app/templates ./templates
+COPY --from=build --chown=node:node /app/protocol ./protocol
 RUN mkdir -p /data && chown node:node /data
 USER node
 WORKDIR /app/packages/server
