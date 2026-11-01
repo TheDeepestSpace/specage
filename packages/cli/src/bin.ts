@@ -10,7 +10,6 @@ import {
   cmdRender,
   cmdState,
 } from './commands.js';
-import { cmdInstall } from './install.js';
 
 const HELP = `specage <command>
 
@@ -22,7 +21,6 @@ const HELP = `specage <command>
   cursor [--tag <dispatch tag>] [--project <name>]
   outbox fire --range <a>..<b> --repo <o/r> --intern <o/r> [--dry-run]
   render --spec <file> --state <dir> --out <dir>
-  install --repo <o/r> [--data-repo <o/r>] [--from <file>] [--upgrade] [--dry-run] [--rulesets]
 
 exit codes: 0 ok, 1 lint/validation errors, 2 usage, 3 git/GitHub error`;
 
@@ -50,8 +48,6 @@ async function main(): Promise<number> {
       return cmdOutbox(a);
     case 'render':
       return cmdRender(a);
-    case 'install':
-      return cmdInstall(a);
     default:
       throw new CliError(`unknown command "${cmd}"`);
   }

@@ -212,7 +212,7 @@ describe('API', () => {
       ['GET', '/api/me'],
       ['GET', '/api/repos'],
       ['GET', '/api/r/o/r/spec'],
-      ['POST', '/api/r/o/r/dispatch'],
+      ['POST', '/api/init'],
     ])
       expect((await h.req(m, p, m === 'POST' ? {} : undefined)).status).toBe(401);
   });
@@ -249,31 +249,110 @@ describe('API', () => {
     expect(stale.status).toBe(409);
     expect(((await stale.json()) as any).content).toContain('shoot.new');
   });
-  it('dispatch preview and dispatch need head match and step-up', async () => {
+  it('a save files a dispatch issue with the diff from the cursor, then advances the cursor', async () => {
+    const h = harness();
+    await h.signup(auth());
+    const pv = (await (await h.req('GET', '/api/r/o/r/dispatch/preview')).json()) as any;
+    expect(pv.cursor).toBeNull();
+    expect(pv.diff.entries.map((e: any) => e.kind)).toEqual(['added', 'added']);
+    const r1 = await h.req('PUT', '/api/r/o/r/spec', {
+      content: SPEC0 + 'New thing @shoot.new;\n',
+      base_sha: pv.head_sha,
+    });
+    const j1 = (await r1.json()) as any;
+    expect(j1.dispatch.issue).toBe(1);
+    expect(h.github.cursor).toBe(j1.head_sha);
+    expect(h.github.issues[0]).toMatchObject({ repo: 'o/r', labels: ['specage-dispatch'] });
+    expect(h.github.issues[0].title).toBe(`specage dispatch ${j1.head_sha.slice(0, 7)}`);
+    expect(h.github.issues[0].body).toContain('none, diff from empty');
+    // second save: cursor is the previous commit
+    const r2 = await h.req('PUT', '/api/r/o/r/spec', {
+      content: SPEC0 + 'New thing @shoot.new;\nMore @shoot.more;\n',
+      base_sha: j1.head_sha,
+    });
+    expect(((await r2.json()) as any).dispatch.issue).toBe(2);
+    expect(h.github.issues[1].body).toContain(`cursor: \`${j1.head_sha}\``);
+    // a save that changes no nodes (whitespace) files nothing but still moves the cursor
+    const j2 = (await (
+      await h.req('PUT', '/api/r/o/r/spec', {
+        content: SPEC0 + 'New thing @shoot.new;\nMore @shoot.more;\n\n',
+        base_sha: h.github.head().sha,
+      })
+    ).json()) as any;
+    expect(j2.dispatch).toBeNull();
+    expect(h.github.issues).toHaveLength(2);
+    expect(h.github.cursor).toBe(j2.head_sha);
+  });
+  it('a failing issue does not fail the save and does not move the cursor', async () => {
+    const h = harness();
+    await h.signup(auth());
+    h.github.noIssuesPermission = true;
+    const r = await h.req('PUT', '/api/r/o/r/spec', {
+      content: SPEC0 + 'X @shoot.x;\n',
+      base_sha: h.github.head().sha,
+    });
+    expect(r.status).toBe(200);
+    expect(((await r.json()) as any).dispatch).toBeNull();
+    expect(h.github.cursor).toBeNull();
+  });
+  it('init: lists repos, previews, creates idempotently, needs step-up and the right repo', async () => {
     let t = Date.parse('2026-10-30T02:11:30Z');
     const h = harness({ now: () => t });
     const a = auth();
     await h.signup(a);
-    const pv = (await (await h.req('GET', '/api/r/o/r/dispatch/preview')).json()) as any;
-    expect(pv.cursor).toBeNull();
-    expect(pv.diff.entries.map((e: any) => e.kind)).toEqual(['added', 'added']);
+    const repos = (await (await h.req('GET', '/api/init/repos')).json()) as any[];
+    expect(repos).toEqual([
+      { repo: 'o/r', private: true, initialised: true },
+      { repo: 'o/new', private: false, initialised: false },
+    ]);
+    const pv = (await (await h.req('POST', '/api/init/preview', { repo: 'o/new' })).json()) as any;
+    expect(pv.branches.map((b: any) => b.action)).toEqual(['create', 'create']);
+    expect(pv.warnings[0]).toMatch(/public/);
+    expect(h.github.created).toEqual({}); // preview writes nothing
+    expect((await h.req('POST', '/api/init/preview', { repo: 'o/nope' })).status).toBe(403);
+    expect((await h.req('POST', '/api/init/preview', { repo: 'bad' })).status).toBe(400);
     expect(
-      (await h.req('POST', '/api/r/o/r/dispatch', { expected_head: 'f'.repeat(40) })).status,
-    ).toBe(409);
-    const d = await h.req('POST', '/api/r/o/r/dispatch', { expected_head: pv.head_sha });
-    expect(d.status).toBe(200);
-    expect(((await d.json()) as any).tag).toBe('dispatch/r/2026-10-30T02-11Z');
-    expect(
-      (await h.req('POST', '/api/r/o/r/dispatch', { expected_head: pv.head_sha })).status,
-    ).toBe(409); // same minute
+      (await h.req('POST', '/api/init/preview', { repo: 'o/new', project: 'other' })).status,
+    ).toBe(400);
+    const ok = await h.req('POST', '/api/init', { repo: 'o/new', backend: 'claude' });
+    expect(ok.status).toBe(200);
+    const spec = h.github.created['specages/new/spec'];
+    expect(Object.keys(spec)).toEqual(
+      expect.arrayContaining([
+        'new.specage',
+        'GRAMMAR.md',
+        '.specage/config.yaml',
+        '.specage/policy.yaml',
+        '.specage/PROTOCOL.md',
+      ]),
+    );
+    expect(Object.keys(spec).some((f) => f.startsWith('.github/'))).toBe(false);
+    expect(spec['.specage/config.yaml']).toContain('repo: o/new');
+    expect(spec['.specage/config.yaml']).toContain('data_repo: o/specage-data');
+    expect(spec['.specage/config.yaml']).not.toMatch(/\{\{/);
+    expect(Object.keys(h.github.created['specages/new/trail'])).toEqual(
+      expect.arrayContaining(['trace.yaml', 'work.yaml', 'questions.yaml']),
+    );
+    expect(h.github.labels).toEqual(['specage-dispatch', 'specage']);
+    // idempotent: the existing project reports "exists" and nothing is overwritten
+    const again = (await (await h.req('POST', '/api/init', { repo: 'o/new' })).json()) as any;
+    expect(again.branches.map((b: any) => b.action)).toEqual(['exists', 'exists']);
     t += 6 * 60_000; // step-up stale
-    expect(
-      (await h.req('POST', '/api/r/o/r/dispatch', { expected_head: pv.head_sha })).status,
-    ).toBe(403);
-    await h.login(a);
-    const pv2 = (await (await h.req('GET', '/api/r/o/r/dispatch/preview')).json()) as any;
-    expect(pv2.cursor).toBe('dispatch/r/2026-10-30T02-11Z');
-    expect(pv2.diff.entries).toEqual([]);
+    expect((await h.req('POST', '/api/init', { repo: 'o/new' })).status).toBe(403);
+  });
+  it('init: missing Issues permission is a clear 403 and nothing is written', async () => {
+    const h = harness();
+    await h.signup(auth());
+    h.github.noIssuesPermission = true;
+    const r = await h.req('POST', '/api/init', { repo: 'o/new' });
+    expect(r.status).toBe(403);
+    expect(((await r.json()) as any).error).toMatch(/Issues/);
+    expect(h.github.created).toEqual({});
+  });
+  it('init routes need a session', async () => {
+    const h = harness();
+    expect((await h.req('GET', '/api/init/repos')).status).toBe(401);
+    expect((await h.req('POST', '/api/init', { repo: 'o/new' })).status).toBe(401);
   });
   it('credentials: cannot delete the last passkey', async () => {
     const h = harness();
@@ -321,6 +400,11 @@ describe('GitHub access', () => {
         });
       if (u.pathname.includes('/contents/'))
         return j({ content: Buffer.from('hello').toString('base64') });
+      if (
+        u.pathname.includes('/git/ref/specage/dispatched/') ||
+        u.pathname.includes('/specages/new/')
+      )
+        return j({}, 404);
       if (u.pathname.endsWith('/git/ref/heads/specages/r/spec'))
         return j({ object: { sha: 'a'.repeat(40) } });
       if (u.pathname.includes('/git/commits/')) return j({ tree: { sha: 't' } });
@@ -331,8 +415,13 @@ describe('GitHub access', () => {
       if (u.pathname.endsWith('/git/refs')) return j({});
       if (u.pathname.includes('matching-refs/heads/specages/'))
         return j([{ ref: 'refs/heads/specages/r/spec' }, { ref: 'refs/heads/specages/r/trail' }]);
-      if (u.pathname.includes('matching-refs'))
-        return j([{ ref: 'refs/tags/dispatch/r/2026-01-01T00-00Z' }]);
+      if (u.pathname.includes('matching-refs')) return j([]);
+      if (u.pathname === '/installation/repositories')
+        return j({ repositories: [{ full_name: 'o/x', private: true, default_branch: 'main' }] });
+      if (u.pathname === '/repos/o/x')
+        return j({ full_name: 'o/x', private: true, default_branch: 'main' });
+      if (u.pathname.endsWith('/labels')) return j({}, 201);
+      if (u.pathname.endsWith('/issues')) return j({ number: 7 }, 201);
       return j({ message: 'unexpected' }, 500);
     };
     return {
@@ -360,9 +449,15 @@ describe('GitHub access', () => {
     const { log, gh } = mock();
     await gh.assertInstalled();
     await gh.listProjects();
-    await gh.getFile('dir/a.specage', 'dispatch/r/2026-01-01T00-00Z');
+    await gh.getFile('dir/a.specage', 'a'.repeat(40));
     await gh.getRef('heads/specages/r/spec');
-    await gh.listDispatchTags('r');
+    await gh.getCursor('r');
+    await gh.setCursor('r', 'a'.repeat(40));
+    await gh.listInstallationRepos();
+    await gh.getRepo('o/x');
+    await gh.ensureLabels('o/x', ['specage']);
+    expect(await gh.createIssue('o/x', { title: 't', body: 'b', labels: [] })).toBe(7);
+    await gh.createOrphanBranch('new', 'spec', { 'a.txt': 'x' }, 'm');
     await gh.commitSpec('r', {
       path: 'a.specage',
       content: 'x',
@@ -370,7 +465,6 @@ describe('GitHub access', () => {
       parentSha: 'a'.repeat(40),
       author: { name: 'n', email: 'e' },
     });
-    await gh.createTag('dispatch/r/x', 'a'.repeat(40));
     expect(log.length).toBeGreaterThan(8);
     for (const l of log)
       expect(
@@ -402,7 +496,13 @@ describe('GitHub access', () => {
       ),
     ).rejects.toThrow(/not allowlisted/);
     await expect(
-      (gh as any).req('POST', '/repos/o/r/issues', { kind: 'install', token: 't' }, {}),
+      (gh as any).req('DELETE', '/repos/o/r/issues/1', { kind: 'install', token: 't' }),
+    ).rejects.toThrow(/not allowlisted/);
+    await expect(
+      (gh as any).req('PATCH', '/repos/o/r/git/refs/specage/dispatched/x/y', {
+        kind: 'install',
+        token: 't',
+      }),
     ).rejects.toThrow(/not allowlisted/);
     await expect(
       (gh as any).req('PUT', '/repos/o/r/contents/x', { kind: 'install', token: 't' }, {}),

@@ -17,6 +17,8 @@ export interface Env {
   authorEmail: string;
   /** owner/repo of the shared data repo holding the specages/<project>/{spec,trail} branches */
   dataRepo: string;
+  /** the-intern repo whose dispatcher workflow runs the agent (written into project config) */
+  internRepo: string;
   dbPath: string;
   webDist: string;
 }
@@ -61,6 +63,7 @@ export function loadEnv(e: NodeJS.ProcessEnv = process.env): Env {
     authorName: e.AUTHOR_NAME ?? 'specage',
     authorEmail: e.AUTHOR_EMAIL ?? 'specage@users.noreply.github.com',
     dataRepo,
+    internRepo: e.INTERN_REPO ?? 'TheDeepestSpace/the-intern',
     dbPath: e.DB_PATH ?? (dev ? resolve('specage-dev.db') : '/data/specage.db'),
     webDist: resolve(e.WEB_DIST ?? join(here, '..', '..', 'web', 'dist')),
   };

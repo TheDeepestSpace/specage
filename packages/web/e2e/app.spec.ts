@@ -163,29 +163,28 @@ test('save, then a conflict with a 3-way view and re-apply', async () => {
   await expect(page.locator('#status')).toContainText('Saved');
 });
 
-test('dispatch: preview, step-up passkey assertion, then POST', async () => {
-  await page.reload();
-  await page.locator('#dispatch').click();
-  await expect(page.locator('#preview li').first()).toBeVisible();
+test('add project: preview, step-up passkey assertion, then POST', async () => {
+  await page.goto('/');
+  await page.locator('#init-repo').selectOption('o/new');
+  await page.locator('#init-preview').click();
+  await expect(page.locator('#init-plan')).toContainText('create: specages/new/spec');
   const order: string[] = [];
   page.on('request', (r) => {
     const u = new URL(r.url()).pathname;
-    if (r.method() === 'POST' && (u === '/auth/login/verify' || u.endsWith('/dispatch')))
-      order.push(u);
+    if (r.method() === 'POST' && (u === '/auth/login/verify' || u === '/api/init')) order.push(u);
   });
-  await page.locator('#confirm-dispatch').click();
-  await expect(page.locator('#status')).toContainText('Dispatched dispatch/');
-  expect(order).toEqual(['/auth/login/verify', '/api/r/o/r/dispatch']);
+  await page.locator('#init-create').click();
+  await expect(page.locator('#init-out')).toContainText('Project added');
+  expect(order).toEqual(['/auth/login/verify', '/api/init']);
 });
 
-test('dispatch is refused without a fresh step-up', async () => {
-  // a session that has not asserted within 5 minutes is covered by the server unit tests; here: no session => 401
+test('init is refused without a session', async () => {
   const r = await page
     .context()
     .browser()!
     .newContext()
     .then((c) =>
-      c.request.post('http://localhost:8788/api/r/o/r/dispatch', {
+      c.request.post('http://localhost:8788/api/init', {
         data: {},
         headers: { origin: 'http://localhost:8788', 'x-specage': '1' },
       }),
@@ -195,7 +194,7 @@ test('dispatch is refused without a fresh step-up', async () => {
 
 test('cross-origin writes are rejected (CSRF)', async () => {
   const s = await page.evaluate(async () => {
-    const r = await fetch('/api/r/o/r/dispatch', {
+    const r = await fetch('/api/init', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: '{}',

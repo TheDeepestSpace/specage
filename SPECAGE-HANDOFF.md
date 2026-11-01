@@ -12,6 +12,14 @@
 
 ---
 
+> **Revision (issue #13): in-app init and commit-driven dispatch.** This supersedes the parts of this document below that describe `specage install`,
+> the `install.yml` workflow, `dispatch/*` tags, `specage-spec.yml`/`specage-trail.yml`, the dispatch action and the `INTERN_DISPATCH_TOKEN` / `PROJECT_TOKEN` / `INSTALL_TOKEN` secrets:
+> - Projects are added in the web UI (`GET /api/init/repos`, `POST /api/init/preview`, `POST /api/init` with passkey step-up), using only the GitHub App installation token. Shared code: `packages/server/src/init.ts`. The CLI `install` command is removed.
+> - A commit on `specages/<project>/spec` is a dispatch. The App's push webhook goes to the-intern's Cloudflare worker, which runs `dispatcher.yml` (the-intern#253). On each save the specage server lints, diffs from the cursor, files the `specage dispatch <sha7>` issue (label `specage-dispatch`) with the App token and advances the cursor.
+> - Cursor = last dispatched commit, stored as ref `refs/specage/dispatched/<project>` in the data repo (no tags). `POST …/dispatch` and the Dispatch button are gone; `GET …/dispatch/preview` remains.
+> - Not provisioned any more: the outbox-firing trail workflow and Pages publishing (both needed a token / Workflows permission).
+> - App permissions: Contents rw on the data repo; Issues rw + Metadata r on project repos; webhook with Push events.
+
 ## 0. TL;DR
 
 specage is a **human-written, structured, natural-language spec** for a
