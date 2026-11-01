@@ -1,5 +1,16 @@
 import { createPrivateKey, createSign } from 'node:crypto';
 
+/** Accepts PEM with real newlines, literal \n, collapsed spaces, or base64 of the PEM. */
+export function normalizePem(raw: string): string {
+  let k = raw.trim().replace(/^["']|["']$/g, '');
+  if (!k.includes('-----BEGIN')) k = Buffer.from(k, 'base64').toString('utf8');
+  k = k.replace(/\\n/g, '\n');
+  const m = k.match(/-----BEGIN ([A-Z ]+)-----([\s\S]*?)-----END \1-----/);
+  if (!m) return k;
+  const body = m[2].replace(/\s+/g, '');
+  return `-----BEGIN ${m[1]}-----\n${body.match(/.{1,64}/g)!.join('\n')}\n-----END ${m[1]}-----\n`;
+}
+
 export class Conflict extends Error {}
 export class NotFound extends Error {}
 
@@ -100,7 +111,7 @@ export class RealGitHub implements GitHub {
     const data = `${b64({ alg: 'RS256', typ: 'JWT' })}.${b64({ iat: t - 30, exp: t + 540, iss: this.o.appId })}`;
     const sig = createSign('RSA-SHA256')
       .update(data)
-      .sign(createPrivateKey(this.o.privateKey!))
+      .sign(createPrivateKey(normalizePem(this.o.privateKey!)))
       .toString('base64url');
     return `${data}.${sig}`;
   }
