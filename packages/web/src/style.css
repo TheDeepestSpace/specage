@@ -401,3 +401,48 @@ dialog.conflict {
     grid-template-columns: 1fr;
   }
 }
+
+/* completion + other CodeMirror tooltips, themed via app variables (light and dark) */
+.cm-tooltip {
+  background: var(--card);
+  color: var(--fg);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  box-shadow: 0 4px 14px rgb(0 0 0 / 0.2);
+  z-index: 20;
+}
+.cm-tooltip.cm-tooltip-autocomplete > ul {
+  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 12.5px;
+  max-height: 14em;
+}
+.cm-tooltip-autocomplete > ul > li {
+  color: var(--fg);
+  padding: 2px 8px;
+}
+.cm-tooltip-autocomplete > ul > li[aria-selected] {
+  background: var(--acc);
+  color: var(--bg);
+}
+.cm-tooltip-autocomplete .cm-completionMatchedText {
+  text-decoration: none;
+  font-weight: 700;
+  color: var(--acc);
+}
+.cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionMatchedText {
+  color: inherit;
+}
+.cm-completionDetail {
+  color: var(--mut);
+  font-style: normal;
+  margin-left: 0.8em;
+}
+.cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionDetail {
+  color: inherit;
+  opacity: 0.85;
+}
+.cm-completionInfo {
+  background: var(--card);
+  color: var(--fg);
+  border: 1px solid var(--line);
+}
