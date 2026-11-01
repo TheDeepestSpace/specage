@@ -1,0 +1,11 @@
+node_modules
+dist
+package-lock.json
+fixtures
+SPECAGE-HANDOFF.md
+*.md
+templates
+packages/action
+test-results
+.github
+packages/cli/bundle

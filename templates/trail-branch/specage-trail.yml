@@ -1,0 +1,37 @@
+name: specage-trail {{project}}
+on:
+  push:
+    branches: ['specages/{{project}}/trail']
+permissions:
+  contents: read
+concurrency: {group: 'specage-{{project}}-trail', cancel-in-progress: false}
+jobs:
+  fire-outbox:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with: {fetch-depth: 0}
+      - uses: TheDeepestSpace/specage/packages/action/fire-outbox@{{specage_version}}
+        with:
+          before: ${{ github.event.before }}
+          after: ${{ github.sha }}
+          repo: {{repo}}
+          intern-repo: {{intern_repo}}
+          intern-workflow: {{intern_workflow}}
+          backend: {{backend}}
+          intern-token: ${{ secrets.INTERN_DISPATCH_TOKEN }}
+  publish:
+    if: {{pages_enabled}}
+    runs-on: ubuntu-latest
+    concurrency: {group: 'specage-{{project}}-publish', cancel-in-progress: false}
+    steps:
+      - uses: TheDeepestSpace/specage/packages/action/publish@{{specage_version}}
+        with:
+          repo: {{repo}}
+          data-repo: {{data_repo}}
+          project: {{project}}
+          spec-file: {{spec_file}}
+          path: {{pages_path}}
+          branch: {{pages_branch}}
+          edit-url: {{ui_url}}
+          token: ${{ secrets.PROJECT_TOKEN }}

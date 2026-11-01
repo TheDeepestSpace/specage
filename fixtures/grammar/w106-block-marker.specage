@@ -1,0 +1,2 @@
+# expect: W106
+!impl: a @x { b @x.y; };

@@ -1,0 +1,51 @@
+name: specage-spec {{project}}
+on:
+  push:
+    branches: ['specages/{{project}}/spec']
+    tags: ['dispatch/{{project}}/*']
+permissions:
+  contents: read
+jobs:
+  lint:
+    if: github.ref_type == 'branch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with: {node-version: 22}
+      - run: npx --yes github:TheDeepestSpace/specage#{{specage_version}} lint {{spec_file}}
+  publish:
+    needs: lint
+    if: github.ref_type == 'branch' && {{pages_enabled}}
+    runs-on: ubuntu-latest
+    concurrency: {group: 'specage-{{project}}-publish', cancel-in-progress: false}
+    steps:
+      - uses: TheDeepestSpace/specage/packages/action/publish@{{specage_version}}
+        with:
+          repo: {{repo}}
+          data-repo: {{data_repo}}
+          project: {{project}}
+          spec-file: {{spec_file}}
+          path: {{pages_path}}
+          branch: {{pages_branch}}
+          edit-url: {{ui_url}}
+          token: ${{ secrets.PROJECT_TOKEN }}
+  dispatch:
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with: {fetch-depth: 0}
+      - run: git fetch --tags --force
+      - uses: TheDeepestSpace/specage/packages/action/dispatch@{{specage_version}}
+        with:
+          tag: ${{ github.ref_name }}
+          repo: {{repo}}
+          data-repo: {{data_repo}}
+          project: {{project}}
+          spec-file: {{spec_file}}
+          intern-repo: {{intern_repo}}
+          intern-workflow: {{intern_workflow}}
+          backend: {{backend}}
+          intern-token: ${{ secrets.INTERN_DISPATCH_TOKEN }}
+          token: ${{ secrets.PROJECT_TOKEN }}

@@ -1,0 +1,26 @@
+# Stand-in fixture: the real tbgwaf.specage (344 lines) was not attached to the repo.
+# Same shape: nested blocks, every marker, escapes and comments.
+
+  Shooting @shoot {
+    A held trigger fires a burst of up to three shots @shoot.burst {
+      A burst never exceeds the magazine capacity @shoot.burst.cap;
+      The HUD bar drains as the burst fires @shoot.burst.bar;  # cosmetic
+      The player dies mid-burst if hit @shoot.burst.death;
+      !invariant: ammo count is never negative @shoot.burst.ammo-nonneg;
+    };
+    !constraint: Weapon stats come from data files, never hardcoded @shoot.data;
+    !impl: Weapons are plain structs updated once per tick @shoot.impl;
+    ? Should bursts be interruptible by reload @shoot.burst.interrupt;
+    >later: Alt-fire modes @shoot.altfire;
+  };
+
+  Rounds @round {
+    A round always runs the full 5 s once it starts @round.duration;
+    Score is shown as a rank, with escapes \@ \{ \} \; \# kept literal @round.score;
+    !proof video: a recorded round from start to scoreboard @round.proof;
+  };
+
+  Menus @menu {
+    The pause menu opens on Esc @menu.pause;
+    !proof screenshot: the pause menu over a running game @menu.pause-shot;
+  };

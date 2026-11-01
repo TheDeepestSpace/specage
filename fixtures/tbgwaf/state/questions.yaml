@@ -1,0 +1,9 @@
+- id: q-0007
+  node: round.duration
+  node_hash: 7de5de6b1450
+  dispatch: dispatch/tbgwaf/2026-10-30T02-11Z
+  kind: contradiction
+  text: "GameLogic.h says a round ends when nothing is in flight, but the code always runs the full 5 s. Which is intended?"
+  options: ["spec is right (full 5 s)", "comment is right (early end)"]
+  state: open
+  answer: null

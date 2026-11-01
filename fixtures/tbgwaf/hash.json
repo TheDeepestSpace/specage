@@ -1,0 +1,70 @@
+{
+  "shoot": {
+    "hash": "fc7cbc901be9",
+    "subtree_hash": "cadb26e0d4d6"
+  },
+  "shoot.burst": {
+    "hash": "448b2d43b44e",
+    "subtree_hash": "d083eea1f162"
+  },
+  "shoot.burst.cap": {
+    "hash": "c88526bb6b31",
+    "subtree_hash": "eafbdf9ae16d"
+  },
+  "shoot.burst.bar": {
+    "hash": "6657ef7c14f8",
+    "subtree_hash": "ac1569e6c6b2"
+  },
+  "shoot.burst.death": {
+    "hash": "71de613ac94e",
+    "subtree_hash": "975abac7b981"
+  },
+  "shoot.burst.ammo-nonneg": {
+    "hash": "e6ae25cb6b4d",
+    "subtree_hash": "fa5276891e73"
+  },
+  "shoot.data": {
+    "hash": "5057fb018ade",
+    "subtree_hash": "81514d7add24"
+  },
+  "shoot.impl": {
+    "hash": "43b2ffde9603",
+    "subtree_hash": "183cfad317fd"
+  },
+  "shoot.burst.interrupt": {
+    "hash": "3314078c6149",
+    "subtree_hash": "c2634150951c"
+  },
+  "shoot.altfire": {
+    "hash": "7baef36545d4",
+    "subtree_hash": "04536e0871d0"
+  },
+  "round": {
+    "hash": "e9af9cdec8eb",
+    "subtree_hash": "bb0d997297df"
+  },
+  "round.duration": {
+    "hash": "7de5de6b1450",
+    "subtree_hash": "523738e523ec"
+  },
+  "round.score": {
+    "hash": "4d336eabc324",
+    "subtree_hash": "c7fa119ba441"
+  },
+  "round.proof": {
+    "hash": "ba36aff52656",
+    "subtree_hash": "8b7bd83098ba"
+  },
+  "menu": {
+    "hash": "93534e3e8a8d",
+    "subtree_hash": "62e50053f2fd"
+  },
+  "menu.pause": {
+    "hash": "72685ee89783",
+    "subtree_hash": "928d3ee75b7e"
+  },
+  "menu.pause-shot": {
+    "hash": "963fff941d4f",
+    "subtree_hash": "f6b88ca49c79"
+  }
+}

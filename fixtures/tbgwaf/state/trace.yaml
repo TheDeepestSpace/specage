@@ -1,0 +1,29 @@
+retired_ids: [shoot.lock.torso]
+consumed_lineage: []
+nodes:
+  shoot.burst.cap:
+    spec_hash: c88526bb6b31
+    status: implemented
+    evidence:
+      - {kind: scenario, ref: tests/scenarios/burst_mag_caps.yaml, commit: 9ff2e3a0000000000000000000000000000000aa, tier: tested}
+      - {kind: code, ref: src/game/Weapon.h#L60-L75, commit: 9ff2e3a0000000000000000000000000000000aa, tier: located}
+      - {kind: pr, ref: 138}
+    verified: {by: TheDeepestSpace, at: 2026-10-30T14:02Z, hash: c88526bb6b31}
+  shoot.burst.bar:
+    spec_hash: 1c07aa19be02
+    status: implemented
+    evidence:
+      - {kind: screenshot, ref: tests/golden/hud_bar.png, commit: 9ff2e3a0000000000000000000000000000000aa, tier: tested}
+  shoot.burst.death:
+    spec_hash: 71de613ac94e
+    status: planned
+  round.duration:
+    spec_hash: 7de5de6b1450
+    status: contradiction
+    evidence:
+      - {kind: code, ref: src/game/GameLogic.h#L88, commit: 9ff2e3a0000000000000000000000000000000aa, tier: located}
+  menu.pause:
+    spec_hash: 72685ee89783
+    status: implemented
+    evidence:
+      - {kind: video, ref: tests/proofs/pause.webm, commit: 9ff2e3a0000000000000000000000000000000aa, tier: tested}

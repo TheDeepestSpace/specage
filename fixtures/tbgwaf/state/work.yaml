@@ -1,0 +1,9 @@
+items:
+  - id: w-0042
+    issue: 251
+    pr: 254
+    state: in_review
+    relations: []
+    claims:
+      shoot.burst.death: {hash: 71de613ac94e, status: pending}
+      shoot.burst.cap: {hash: c88526bb6b31, status: done}

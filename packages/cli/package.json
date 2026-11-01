@@ -1,0 +1,12 @@
+{
+  "name": "@specage/cli",
+  "version": "0.1.0",
+  "type": "module",
+  "bin": {
+    "specage": "dist/bin.js"
+  },
+  "main": "dist/index.js",
+  "dependencies": {
+    "@specage/core": "*"
+  }
+}
