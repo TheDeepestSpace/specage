@@ -102,6 +102,7 @@ export const ALLOWED: { method: string; auth: 'jwt' | 'install'; re: RegExp }[] 
     re: new RegExp(`^/repos/${SEG}/${SEG}/git/refs/heads/specages/${SEG}/spec$`),
   },
   { method: 'POST', auth: 'install', re: new RegExp(`^/repos/${SEG}/${SEG}/git/refs$`) },
+  { method: 'PUT', auth: 'install', re: new RegExp(`^/repos/${SEG}/${SEG}/contents/README\\.md$`) },
 ];
 
 export class RealGitHub implements GitHub {
@@ -298,6 +299,16 @@ export class RealGitHub implements GitHub {
       if (!r.ok) throw new Error(`GitHub ${r.status}`);
       return (await r.json()) as any;
     };
+    // git data API refuses an empty repo (409); seed it with a README commit via the contents API
+    const probe = await this.repoReq('POST', '/git/blobs', { content: '', encoding: 'utf-8' });
+    if (probe.status === 409) {
+      await must(
+        await this.repoReq('PUT', '/contents/README.md', {
+          message: 'Initialise specage data repo',
+          content: Buffer.from('# specage data\n').toString('base64'),
+        }),
+      );
+    }
     const tree: { path: string; mode: string; type: string; sha: string }[] = [];
     for (const [path, content] of Object.entries(files)) {
       const blob = await must(
