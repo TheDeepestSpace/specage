@@ -262,7 +262,7 @@ describe('API', () => {
     ).toBe(409);
     const d = await h.req('POST', '/api/r/o/r/dispatch', { expected_head: pv.head_sha });
     expect(d.status).toBe(200);
-    expect(((await d.json()) as any).tag).toBe('dispatch/2026-10-30T02-11Z');
+    expect(((await d.json()) as any).tag).toBe('dispatch/r/2026-10-30T02-11Z');
     expect(
       (await h.req('POST', '/api/r/o/r/dispatch', { expected_head: pv.head_sha })).status,
     ).toBe(409); // same minute
@@ -272,7 +272,7 @@ describe('API', () => {
     ).toBe(403);
     await h.login(a);
     const pv2 = (await (await h.req('GET', '/api/r/o/r/dispatch/preview')).json()) as any;
-    expect(pv2.cursor).toBe('dispatch/2026-10-30T02-11Z');
+    expect(pv2.cursor).toBe('dispatch/r/2026-10-30T02-11Z');
     expect(pv2.diff.entries).toEqual([]);
   });
   it('credentials: cannot delete the last passkey', async () => {
@@ -321,41 +321,56 @@ describe('GitHub access', () => {
         });
       if (u.pathname.includes('/contents/'))
         return j({ content: Buffer.from('hello').toString('base64') });
-      if (u.pathname.endsWith('/git/ref/heads/spec')) return j({ object: { sha: 'a'.repeat(40) } });
+      if (u.pathname.endsWith('/git/ref/heads/specages/r/spec'))
+        return j({ object: { sha: 'a'.repeat(40) } });
       if (u.pathname.includes('/git/commits/')) return j({ tree: { sha: 't' } });
       if (u.pathname.endsWith('/git/blobs')) return j({ sha: 'b' });
       if (u.pathname.endsWith('/git/trees')) return j({ sha: 't2' });
       if (u.pathname.endsWith('/git/commits')) return j({ sha: 'c'.repeat(40) });
-      if (u.pathname.endsWith('/git/refs/heads/spec')) return j({});
+      if (u.pathname.endsWith('/git/refs/heads/specages/r/spec')) return j({});
       if (u.pathname.endsWith('/git/refs')) return j({});
+      if (u.pathname.includes('matching-refs/heads/specages/'))
+        return j([{ ref: 'refs/heads/specages/r/spec' }, { ref: 'refs/heads/specages/r/trail' }]);
       if (u.pathname.includes('matching-refs'))
-        return j([{ ref: 'refs/tags/dispatch/2026-01-01T00-00Z' }]);
+        return j([{ ref: 'refs/tags/dispatch/r/2026-01-01T00-00Z' }]);
       return j({ message: 'unexpected' }, 500);
     };
-    return { log, gh: new RealGitHub({ appId: '1', privateKey: pem, fetch: fetch as any }) };
+    return {
+      log,
+      gh: new RealGitHub({
+        dataRepo: 'o/specage-data',
+        appId: '1',
+        privateKey: pem,
+        fetch: fetch as any,
+      }),
+    };
   }
-  it('mints a repo-scoped, contents-only installation token and caches it', async () => {
+  it('mints a data-repo-scoped, contents-only installation token and caches it', async () => {
     const { log, gh } = mock();
-    await gh.getFile('o', 'r', 'a.specage', 'spec');
-    await gh.getFile('o', 'r', 'a.specage', 'spec');
+    await gh.getFile('a.specage', 'specages/r/spec');
+    await gh.getFile('a.specage', 'specages/r/spec');
     const mints = log.filter((l) => l.path.endsWith('/access_tokens'));
     expect(mints).toHaveLength(1);
-    expect(mints[0].body).toEqual({ repositories: ['r'], permissions: { contents: 'write' } });
+    expect(mints[0].body).toEqual({
+      repositories: ['specage-data'],
+      permissions: { contents: 'write' },
+    });
   });
   it('every request made by every operation is on the allowlist', async () => {
     const { log, gh } = mock();
-    await gh.assertInstalled('o', 'r');
-    await gh.getFile('o', 'r', 'dir/a.specage', 'dispatch/2026-01-01T00-00Z');
-    await gh.getRef('o', 'r', 'heads/spec');
-    await gh.listDispatchTags('o', 'r');
-    await gh.commitSpec('o', 'r', {
+    await gh.assertInstalled();
+    await gh.listProjects();
+    await gh.getFile('dir/a.specage', 'dispatch/r/2026-01-01T00-00Z');
+    await gh.getRef('heads/specages/r/spec');
+    await gh.listDispatchTags('r');
+    await gh.commitSpec('r', {
       path: 'a.specage',
       content: 'x',
       message: 'm',
       parentSha: 'a'.repeat(40),
       author: { name: 'n', email: 'e' },
     });
-    await gh.createTag('o', 'r', 'dispatch/x', 'a'.repeat(40));
+    await gh.createTag('dispatch/r/x', 'a'.repeat(40));
     expect(log.length).toBeGreaterThan(8);
     for (const l of log)
       expect(
@@ -374,6 +389,14 @@ describe('GitHub access', () => {
       (gh as any).req(
         'PATCH',
         '/repos/o/r/git/refs/heads/main',
+        { kind: 'install', token: 't' },
+        {},
+      ),
+    ).rejects.toThrow(/not allowlisted/);
+    await expect(
+      (gh as any).req(
+        'PATCH',
+        '/repos/o/specage-data/git/refs/heads/specages/r/trail',
         { kind: 'install', token: 't' },
         {},
       ),

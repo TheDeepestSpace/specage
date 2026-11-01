@@ -1,6 +1,8 @@
 # specage configuration (written by `specage install`, edit by hand on the spec branch)
 specage_version: {{specage_version}}
 project: {{project}}
+repo: {{repo}}
+data_repo: {{data_repo}}
 spec_file: {{spec_file}}
 reviewer: {{reviewer}}
 intern:

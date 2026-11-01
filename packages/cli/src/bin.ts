@@ -17,12 +17,12 @@ const HELP = `specage <command>
   parse <file> [--json]
   lint <file> [--state <dir>] [--json]
   hash <file> [--json]
-  diff --from <ref|file|empty|dispatch/latest> --to <ref|file> [--spec-file <name>] [--json]
+  diff --from <ref|file|empty|dispatch/latest> --to <ref|file> [--spec-file <name>] [--project <name>] [--json]
   state validate <dir> | state commit -m <msg> [--dir <checkout>]
-  cursor [--tag <dispatch tag>]
+  cursor [--tag <dispatch tag>] [--project <name>]
   outbox fire --range <a>..<b> --repo <o/r> --intern <o/r> [--dry-run]
   render --spec <file> --state <dir> --out <dir>
-  install --repo <o/r> [--from <file>] [--upgrade] [--dry-run] [--rulesets]
+  install --repo <o/r> [--data-repo <o/r>] [--from <file>] [--upgrade] [--dry-run] [--rulesets]
 
 exit codes: 0 ok, 1 lint/validation errors, 2 usage, 3 git/GitHub error`;
 

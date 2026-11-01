@@ -22,7 +22,7 @@ import {
 import YAML from 'yaml';
 import type { Db } from './db.js';
 import type { Env } from './env.js';
-import { Conflict, NotFound, type GitHub } from './github.js';
+import { Conflict, NotFound, specBranch, trailBranch, type GitHub } from './github.js';
 import { safeEqual, seal, unseal } from './seal.js';
 import {
   SIGNUP_PURPOSE,
@@ -379,23 +379,36 @@ export function createApp({ env, db, github, now = Date.now }: Deps) {
     return c.json({ ok: true });
   });
 
-  app.get('/api/repos', async (c) => c.json(await github.listEnabledRepos()));
+  // the UI lists project repos; each maps to specages/<repo-name>/{spec,trail} in the data repo
+  app.get('/api/repos', async (c) => {
+    const out: string[] = [];
+    for (const p of await github.listProjects()) {
+      const cfgText = await github.getFile('.specage/config.yaml', specBranch(p));
+      if (cfgText === null) continue;
+      const cfg = ConfigSchema.safeParse(YAML.parse(cfgText));
+      if (cfg.success) out.push(cfg.data.repo ?? p);
+    }
+    return c.json(out);
+  });
 
-  // everything under /api/r/:owner/:repo: validated names, App installed, spec branch configured
+  // everything under /api/r/:owner/:repo: validated names, App installed on the data repo,
+  // spec branch specages/<repo>/spec configured and claiming this project repo
   app.use('/api/r/:owner/:repo/*', async (c, next) => {
     const { owner, repo } = c.req.param();
     if (!/^[\w.-]+$/.test(owner) || !/^[\w.-]+$/.test(repo))
       return c.json({ error: 'bad repo' }, 400);
     try {
-      await github.assertInstalled(owner, repo);
-      const cfgText = await github.getFile(owner, repo, '.specage/config.yaml', 'spec');
+      await github.assertInstalled();
+      const cfgText = await github.getFile('.specage/config.yaml', specBranch(repo));
       if (cfgText === null) return c.json({ error: 'repo is not specage-enabled' }, 404);
       const cfg = ConfigSchema.safeParse(YAML.parse(cfgText));
       if (!cfg.success) return c.json({ error: 'invalid .specage/config.yaml' }, 422);
+      if (cfg.data.repo && cfg.data.repo !== `${owner}/${repo}`)
+        return c.json({ error: 'repo is not specage-enabled' }, 404);
       c.set('cfg' as never, cfg.data as never);
     } catch (e) {
       if (e instanceof NotFound)
-        return c.json({ error: 'specage App is not installed on this repo' }, 404);
+        return c.json({ error: 'specage App is not installed on the data repo' }, 404);
       throw e;
     }
     return next();
@@ -403,18 +416,18 @@ export function createApp({ env, db, github, now = Date.now }: Deps) {
   const cfgOf = (c: Context) => c.get('cfg' as never) as ReturnType<typeof ConfigSchema.parse>;
 
   app.get('/api/r/:owner/:repo/spec', async (c) => {
-    const { owner, repo } = c.req.param();
+    const { repo } = c.req.param();
     const path = cfgOf(c).spec_file;
-    const head = await github.getRef(owner, repo, 'heads/spec');
-    const content = head && (await github.getFile(owner, repo, path, 'spec'));
+    const head = await github.getRef(`heads/${specBranch(repo)}`);
+    const content = head && (await github.getFile(path, specBranch(repo)));
     if (!head || content === null) return c.json({ error: 'spec file not found' }, 404);
     return c.json({ content, head_sha: head, path });
   });
 
   app.get('/api/r/:owner/:repo/state', async (c) => {
-    const { owner, repo } = c.req.param();
+    const { repo } = c.req.param();
     const f = async (p: string) => {
-      const t = await github.getFile(owner, repo, p, 'spec-state');
+      const t = await github.getFile(p, trailBranch(repo));
       return t === null ? undefined : parseYaml(t);
     };
     const { state } = parseState({
@@ -448,7 +461,7 @@ export function createApp({ env, db, github, now = Date.now }: Deps) {
     const spec = parse(body.content);
     let retired: string[] = [];
     try {
-      const t = await github.getFile(owner, repo, 'trace.yaml', 'spec-state');
+      const t = await github.getFile('trace.yaml', trailBranch(repo));
       if (t) retired = parseState({ trace: parseYaml(t) }).state.trace.retired_ids;
     } catch {
       /* state is advisory for lint */
@@ -458,8 +471,8 @@ export function createApp({ env, db, github, now = Date.now }: Deps) {
       db.audit('save', `${owner}/${repo}`, '422');
       return c.json({ diagnostics: diags }, 422);
     }
-    const head = await github.getRef(owner, repo, 'heads/spec');
-    const remote = (await github.getFile(owner, repo, path, 'spec')) ?? '';
+    const head = await github.getRef(`heads/${specBranch(repo)}`);
+    const remote = (await github.getFile(path, specBranch(repo))) ?? '';
     if (head !== body.base_sha) {
       db.audit('save', `${owner}/${repo}`, '409');
       return c.json({ error: 'conflict', head_sha: head, content: remote }, 409);
@@ -470,7 +483,7 @@ export function createApp({ env, db, github, now = Date.now }: Deps) {
       .slice(0, 3);
     const message = `spec: ${ids.length ? ids.join(', ') : 'update'}${d.entries.length > 3 ? ` (+${d.entries.length - 3} more)` : ''}`;
     try {
-      const sha = await github.commitSpec(owner, repo, {
+      const sha = await github.commitSpec(repo, {
         path,
         content: body.content,
         message,
@@ -485,8 +498,8 @@ export function createApp({ env, db, github, now = Date.now }: Deps) {
         return c.json(
           {
             error: 'conflict',
-            head_sha: await github.getRef(owner, repo, 'heads/spec'),
-            content: (await github.getFile(owner, repo, path, 'spec')) ?? '',
+            head_sha: await github.getRef(`heads/${specBranch(repo)}`),
+            content: (await github.getFile(path, specBranch(repo))) ?? '',
           },
           409,
         );
@@ -496,14 +509,14 @@ export function createApp({ env, db, github, now = Date.now }: Deps) {
   });
 
   app.get('/api/r/:owner/:repo/dispatch/preview', async (c) => {
-    const { owner, repo } = c.req.param();
+    const { repo } = c.req.param();
     const path = cfgOf(c).spec_file;
-    const head = await github.getRef(owner, repo, 'heads/spec');
-    const headText = head ? await github.getFile(owner, repo, path, 'spec') : null;
+    const head = await github.getRef(`heads/${specBranch(repo)}`);
+    const headText = head ? await github.getFile(path, specBranch(repo)) : null;
     if (!head || headText === null) return c.json({ error: 'spec file not found' }, 404);
-    const tags = await github.listDispatchTags(owner, repo);
+    const tags = await github.listDispatchTags(repo);
     const cursor = tags.length ? tags[tags.length - 1] : null;
-    const old = cursor ? await github.getFile(owner, repo, path, cursor) : null;
+    const old = cursor ? await github.getFile(path, cursor) : null;
     const d = diff(old === null ? { roots: [], diagnostics: [] } : parse(old), parse(headText));
     return c.json({ cursor, head_sha: head, diff: d, nodes: flatten(parse(headText)).length });
   });
@@ -517,13 +530,13 @@ export function createApp({ env, db, github, now = Date.now }: Deps) {
     const body = await c.req.json().catch(() => null);
     if (!body || typeof body.expected_head !== 'string')
       return c.json({ error: 'expected_head required' }, 400);
-    const head = await github.getRef(owner, repo, 'heads/spec');
+    const head = await github.getRef(`heads/${specBranch(repo)}`);
     if (head !== body.expected_head)
       return c.json({ error: 'spec head moved', head_sha: head }, 409);
     const d = new Date(now());
-    const tag = `dispatch/${d.toISOString().slice(0, 16).replace(':', '-')}Z`;
+    const tag = `dispatch/${repo}/${d.toISOString().slice(0, 16).replace(':', '-')}Z`;
     try {
-      await github.createTag(owner, repo, tag, head!);
+      await github.createTag(tag, head!);
     } catch (e) {
       if (e instanceof Conflict)
         return c.json(

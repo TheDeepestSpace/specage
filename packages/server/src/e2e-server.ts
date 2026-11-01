@@ -10,7 +10,7 @@ if (process.env.NODE_ENV !== 'development')
   throw new Error('e2e-server requires NODE_ENV=development');
 const env = loadEnv();
 const gh = new FakeGitHub();
-gh.files['spec-state:trace.yaml'] = `retired_ids: [old.id]
+gh.files['specages/r/trail:trace.yaml'] = `retired_ids: [old.id]
 nodes:
   shoot.burst:
     spec_hash: 000000000000
@@ -19,7 +19,7 @@ nodes:
       - {kind: code, ref: src/Weapon.h#L1-L9, commit: 9ff2e3a0000000000000000000000000000000aa, tier: located}
 `;
 const cap = flatten(parse(gh.head().spec)).find((n) => n.id === 'shoot.cap')!.hash;
-gh.files['spec-state:trace.yaml'] += `  shoot.cap:
+gh.files['specages/r/trail:trace.yaml'] += `  shoot.cap:
     spec_hash: ${cap}
     status: implemented
     verified: {by: owner, at: 2026-10-30T14:02Z, hash: ${cap}}

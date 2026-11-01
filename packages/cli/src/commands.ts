@@ -130,14 +130,19 @@ export function cmdDiff(a: Args): number {
   const to = str(a, 'to');
   if (!from || !to)
     throw new CliError('usage: specage diff --from <ref|file|empty> --to <ref|file> [--json]');
-  const opts = { specFile: str(a, 'spec-file'), to, cwd: str(a, 'cwd') };
+  const opts = {
+    specFile: str(a, 'spec-file'),
+    to,
+    cwd: str(a, 'cwd'),
+    project: str(a, 'project'),
+  };
   const d = diff(loadSpecRef(from, opts), loadSpecRef(to, opts));
   out(a.flags.json ? JSON.stringify(d, null, 2) : summarize(d));
   return 0;
 }
 
 export function cmdCursor(a: Args): number {
-  const c = cursorTag(str(a, 'tag'), str(a, 'cwd'));
+  const c = cursorTag(str(a, 'tag'), str(a, 'cwd'), str(a, 'project'));
   out(c ?? '');
   return 0;
 }
@@ -177,7 +182,8 @@ export function cmdState(a: Args): number {
     }
     git(['commit', '-m', msg], dir);
     const remote = str(a, 'remote') ?? 'origin';
-    const branch = str(a, 'branch') ?? 'spec-state';
+    // default to the checked-out trail branch (specages/<project>/trail)
+    const branch = str(a, 'branch') ?? git(['rev-parse', '--abbrev-ref', 'HEAD'], dir).trim();
     let last = '';
     for (let i = 0; i < 5; i++) {
       try {
@@ -201,7 +207,7 @@ function sleepSync(ms: number) {
 }
 void sleep;
 
-/** Outbox entries added between two commits of spec-state. */
+/** Outbox entries added between two commits of the trail branch. */
 export function addedOutbox(range: string, cwd: string): string[] {
   const [a, b] = range.split('..');
   if (!a || !b) throw new CliError('--range must be <a>..<b>');

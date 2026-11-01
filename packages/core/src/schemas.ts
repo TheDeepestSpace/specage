@@ -3,6 +3,10 @@ import { z } from 'zod';
 export const ConfigSchema = z.object({
   specage_version: z.string(),
   project: z.string(),
+  /** the project's code repo (owner/repo); issues, PRs and Pages live here */
+  repo: z.string().optional(),
+  /** the shared data repo holding the specages/<project>/{spec,trail} branches */
+  data_repo: z.string().optional(),
   spec_file: z.string(),
   reviewer: z.string(),
   intern: z.object({

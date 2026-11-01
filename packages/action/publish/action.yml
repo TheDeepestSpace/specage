@@ -1,27 +1,32 @@
 name: specage publish
-description: Render the spec and state and publish them under gh-pages/<path>/ without disturbing the rest of the site
+description: Render spec and trail from the data repo and publish under the project repo's gh-pages/<path>/ without disturbing the rest of the site
 inputs:
+  repo: {description: project code repo (owner/repo) whose gh-pages is published to, required: true}
+  data-repo: {description: data repo holding the specages/<project>/* branches, required: true}
+  project: {description: project name (branch namespace), required: true}
   spec-file: {description: spec file name on the spec branch, required: true}
   path: {description: subdirectory of gh-pages, default: specage}
-  project: {description: project name, required: true}
   edit-url: {description: specage server URL, default: ''}
   cli: {description: npx spec for the specage CLI, default: 'github:TheDeepestSpace/specage#v0'}
-  token: {description: token with contents write, required: true}
+  token: {description: PROJECT_TOKEN (contents write on the project repo, read on the data repo), required: true}
   branch: {description: Pages branch, default: gh-pages}
 runs:
   using: composite
   steps:
     - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
       with: {node-version: 22}
-    - name: Fetch spec and state
+    - name: Fetch spec and trail from the data repo
       shell: bash
-      env: {GH_TOKEN: ${{ inputs.token }}}
+      env:
+        GH_TOKEN: ${{ inputs.token }}
+        DATA_REPO: ${{ inputs.data-repo }}
+        PROJECT: ${{ inputs.project }}
       run: |
         set -euo pipefail
-        url="https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
-        git clone --quiet --depth 1 --branch spec "$url" "$RUNNER_TEMP/spec"
-        if git ls-remote --exit-code --heads "$url" spec-state >/dev/null; then
-          git clone --quiet --depth 1 --branch spec-state "$url" "$RUNNER_TEMP/state"
+        url="https://x-access-token:${GH_TOKEN}@github.com/${DATA_REPO}.git"
+        git clone --quiet --depth 1 --branch "specages/$PROJECT/spec" "$url" "$RUNNER_TEMP/spec"
+        if git ls-remote --exit-code --heads "$url" "specages/$PROJECT/trail" >/dev/null; then
+          git clone --quiet --depth 1 --branch "specages/$PROJECT/trail" "$url" "$RUNNER_TEMP/state"
         else
           mkdir -p "$RUNNER_TEMP/state"
         fi
@@ -31,13 +36,15 @@ runs:
         set -euo pipefail
         npx --yes "${{ inputs.cli }}" render --spec "$RUNNER_TEMP/spec/${{ inputs.spec-file }}" \
           --state "$RUNNER_TEMP/state" --out "$RUNNER_TEMP/site" --project "${{ inputs.project }}" \
-          --repo "$GITHUB_REPOSITORY" --edit-url "${{ inputs.edit-url }}"
+          --repo "${{ inputs.repo }}" --edit-url "${{ inputs.edit-url }}"
     - name: Push to gh-pages/<path> (retry, never replaces the whole branch)
       shell: bash
-      env: {GH_TOKEN: ${{ inputs.token }}}
+      env:
+        GH_TOKEN: ${{ inputs.token }}
+        REPO: ${{ inputs.repo }}
       run: |
         set -euo pipefail
-        url="https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+        url="https://x-access-token:${GH_TOKEN}@github.com/${REPO}.git"
         for i in 1 2 3 4 5; do
           rm -rf "$RUNNER_TEMP/pages"
           git clone --quiet --depth 1 --branch "${{ inputs.branch }}" "$url" "$RUNNER_TEMP/pages"

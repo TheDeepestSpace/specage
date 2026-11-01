@@ -1,8 +1,9 @@
 name: specage fire-outbox
-description: Trigger the-intern for every outbox entry added in the pushed range
+description: Trigger the-intern for every outbox entry added in the pushed range of a trail branch
 inputs:
   before: {description: github.event.before, required: true}
   after: {description: github.sha, required: true}
+  repo: {description: project code repo (owner/repo) the outbox targets refer to, required: true}
   intern-repo: {required: true, description: the-intern repo}
   intern-workflow: {description: dispatcher workflow, default: dispatcher.yml}
   backend: {description: backend token, default: claude}
@@ -18,5 +19,5 @@ runs:
         GH_TOKEN: ${{ inputs.intern-token }}
       run: |
         npx --yes "${{ inputs.cli }}" outbox fire --range "${{ inputs.before }}..${{ inputs.after }}" \
-          --repo "$GITHUB_REPOSITORY" --intern "${{ inputs.intern-repo }}" \
+          --repo "${{ inputs.repo }}" --intern "${{ inputs.intern-repo }}" \
           --workflow "${{ inputs.intern-workflow }}" --backend "${{ inputs.backend }}"

@@ -10,6 +10,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   const env = loadEnv();
   const db = openDb(env.dbPath);
   const github = new RealGitHub({
+    dataRepo: env.dataRepo,
     appId: env.appId,
     privateKey: env.appPrivateKey,
     devToken: env.devGithubToken,

@@ -32,17 +32,19 @@ Choose the final hostname before signing up: passkeys are bound to the RP ID.
 
 ## GitHub access
 
-The server reaches GitHub only through `RealGitHub`, whose request wrapper refuses anything not in `ALLOWED`
-(`packages/server/src/github.ts`): installation lookup, token minting, reads of file contents/refs/commits, blob/tree/commit
-creation, a non-force update of `refs/heads/spec`, and creation of `refs/tags/dispatch/*`-style refs. Per-repo installation tokens are
-limited to the one repository and `contents`, cached in memory until 5 minutes before expiry, and never sent to the browser
-(tested). Repo rulesets (`specage install --rulesets`, HUMAN-CONFIRM) further limit the App to `spec` and `dispatch/*` tags.
+The server talks to one repository only: the data repo (`SPECAGE_DATA_REPO`) that holds every project's
+`specages/<project>/{spec,trail}` branches. It reaches GitHub only through `RealGitHub`, whose request wrapper refuses anything
+not in `ALLOWED` (`packages/server/src/github.ts`): installation lookup, token minting, reads of file contents/refs/commits,
+blob/tree/commit creation, a non-force update of `refs/heads/specages/*/spec`, and creation of `refs/tags/dispatch/*`-style refs.
+Installation tokens are limited to the data repo and `contents`, cached in memory until 5 minutes before expiry, and never sent
+to the browser (tested). Data-repo rulesets (`specage install --rulesets`, HUMAN-CONFIRM) further limit the App to the
+`specages/*/spec` branches and `dispatch/*` tags.
 
 `DEV_GITHUB_TOKEN` is refused unless `NODE_ENV=development`.
 
 ## Untrusted content
 
-Spec text and everything under `spec-state` is untrusted. The SPA builds DOM with `textContent` only (no `innerHTML`, no markdown),
+Spec text and everything on a trail branch is untrusted. The SPA builds DOM with `textContent` only (no `innerHTML`, no markdown),
 and links come from an allowlist (`github.com`, `*.githubusercontent.com`, `*.github.io`, same origin). Evidence must be pinned to a commit
 or it is not linked. The Pages build has no auth path and no token handling.
 

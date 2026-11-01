@@ -24,7 +24,7 @@ text      = [ marker ] , prose ;
 
 - Every statement has one. Untracked asides go in comments.
 - An ID is a name, not a path. A child usually extends its parent's prefix (warning if not).
-- IDs are unique and never reused. A removed node's ID is retired in `spec-state/trace.yaml`.
+- IDs are unique and never reused. A removed node's ID is retired in `trace.yaml` on the project's trail branch.
 - A moved node keeps its ID.
 
 ## Markers

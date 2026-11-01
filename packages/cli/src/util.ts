@@ -68,13 +68,23 @@ export function readSpecFile(p: string): Spec {
   return parse(readFileSync(p, 'utf8'));
 }
 
-export function listDispatchTags(cwd?: string): string[] {
-  return git(['tag', '-l', 'dispatch/*'], cwd).split('\n').filter(Boolean).sort();
+export const DEFAULT_DATA_REPO = 'TheDeepestSpace/specage-data';
+export const specBranch = (project: string) => `specages/${project}/spec`;
+export const trailBranch = (project: string) => `specages/${project}/trail`;
+
+/** Dispatch tags are `dispatch/<project>/<ts>`; scoped to one project when given. */
+export function listDispatchTags(cwd?: string, project?: string): string[] {
+  return git(['tag', '-l', project ? `dispatch/${project}/*` : 'dispatch/*'], cwd)
+    .split('\n')
+    .filter(Boolean)
+    .sort();
 }
 
-/** Tag preceding `before` (exclusive), or the latest tag if `before` is omitted. */
-export function cursorTag(before?: string, cwd?: string): string | null {
-  const tags = listDispatchTags(cwd).filter((t) => !before || t < before);
+/** Tag preceding `before` (exclusive), or the latest tag if `before` is omitted.
+ *  The project is taken from `before` (`dispatch/<project>/<ts>`) unless given. */
+export function cursorTag(before?: string, cwd?: string, project?: string): string | null {
+  const p = project ?? /^dispatch\/(.+)\/[^/]+$/.exec(before ?? '')?.[1];
+  const tags = listDispatchTags(cwd, p).filter((t) => !before || t < before);
   return tags.length ? tags[tags.length - 1] : null;
 }
 
@@ -90,13 +100,17 @@ export function specFileAt(ref: string, hint: string | undefined, cwd?: string):
 /** Resolve `empty`, a file path, `dispatch/latest`, or a git ref to a Spec. */
 export function loadSpecRef(
   ref: string,
-  opts: { specFile?: string; to?: string; cwd?: string },
+  opts: { specFile?: string; to?: string; cwd?: string; project?: string },
 ): Spec {
   if (ref === 'empty') return { roots: [], diagnostics: [] };
   if (existsSync(ref)) return readSpecFile(ref);
   let r = ref;
   if (ref === 'dispatch/latest') {
-    const c = cursorTag(opts.to && opts.to.startsWith('dispatch/') ? opts.to : undefined, opts.cwd);
+    const c = cursorTag(
+      opts.to && opts.to.startsWith('dispatch/') ? opts.to : undefined,
+      opts.cwd,
+      opts.project,
+    );
     if (!c) return { roots: [], diagnostics: [] };
     r = c;
   }

@@ -6,16 +6,18 @@ The session's token could not create repositories (`gh api repos/TheDeepestSpace
 the installation token has no admin on any repo). Per the handoff, a failed or unrun spike means stop and report:
 nothing in P3 should be treated as proven until these are recorded here.
 
-Run them in a throwaway repo (`specage-sandbox`). Record the date, the result, and the evidence URL under each heading.
+Run them with a throwaway project repo (`specage-sandbox`) and a throwaway data repo (`specage-data-sandbox`).
+Record the date, the result, and the evidence URL under each heading.
 
-## 1. Workflow on an orphan branch runs for `push` and for tags pushed onto its commits
+## 1. Workflow on an orphan branch of the data repo runs for `push` and for tags pushed onto its commits
 
 ```sh
 gh repo create TheDeepestSpace/specage-sandbox --public --add-readme
-node packages/cli/dist/bin.js install --repo TheDeepestSpace/specage-sandbox --dry-run   # review the plan
-node packages/cli/dist/bin.js install --repo TheDeepestSpace/specage-sandbox
-# push a trivial change to `spec`: the lint job of specage-spec.yml should run
-# then: git tag dispatch/2026-01-01T00-00Z <spec sha> && git push origin dispatch/2026-01-01T00-00Z
+gh repo create TheDeepestSpace/specage-data-sandbox --private --add-readme
+node packages/cli/dist/bin.js install --repo TheDeepestSpace/specage-sandbox --data-repo TheDeepestSpace/specage-data-sandbox --dry-run   # review the plan
+node packages/cli/dist/bin.js install --repo TheDeepestSpace/specage-sandbox --data-repo TheDeepestSpace/specage-data-sandbox
+# push a trivial change to specages/specage-sandbox/spec in the data repo: the lint job of specage-spec.yml should run
+# then: git tag dispatch/specage-sandbox/2026-01-01T00-00Z <spec sha> && git push origin dispatch/specage-sandbox/2026-01-01T00-00Z
 # the dispatch job should run, with github.ref_type == tag
 ```
 
@@ -28,9 +30,9 @@ Known risk: events created with `GITHUB_TOKEN` do not trigger workflows; install
 
 Result: _not run_
 
-## 3. Pushes to `spec-state` with the-intern's App token trigger `specage-state.yml`; `GITHUB_TOKEN` pushes do not
+## 3. Pushes to a trail branch with the-intern's App token trigger `specage-trail.yml`; `GITHUB_TOKEN` pushes do not
 
-Push once with each token to `spec-state` and compare Actions runs.
+Push once with each token to `specages/<project>/trail` in the data repo and compare Actions runs.
 
 Result: _not run_
 

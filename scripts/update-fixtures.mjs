@@ -25,7 +25,7 @@ w(
 w('lint.json', lint(spec));
 console.log('fixtures updated');
 
-// Sample spec-state (used by the CLI render test, the Playwright e2e and the dogfood page).
+// Sample trail state (used by the CLI render test, the Playwright e2e and the dogfood page).
 const h = Object.fromEntries(flatten(spec).map((n) => [n.id, n.hash]));
 const state = new URL('state/', dir);
 mkdirSync(new URL('dispatches/', state), { recursive: true });
@@ -81,7 +81,7 @@ writeFileSync(
   `- id: q-0007
   node: round.duration
   node_hash: ${h['round.duration']}
-  dispatch: dispatch/2026-10-30T02-11Z
+  dispatch: dispatch/tbgwaf/2026-10-30T02-11Z
   kind: contradiction
   text: "GameLogic.h says a round ends when nothing is in flight, but the code always runs the full 5 s. Which is intended?"
   options: ["spec is right (full 5 s)", "comment is right (early end)"]
@@ -91,7 +91,7 @@ writeFileSync(
 );
 writeFileSync(
   new URL('dispatches/dispatch-2026-10-30T02-11Z.md', state),
-  `# dispatch/2026-10-30T02-11Z
+  `# dispatch/tbgwaf/2026-10-30T02-11Z
 
 1 contradiction, 3 implemented, 1 planned.
 

@@ -2,13 +2,15 @@
 
 Instructions for a dispatch session. Follow them exactly. Be terse.
 
-You never edit the `spec` branch. You write `spec-state` only through `specage state commit`, once per session.
+The spec and trail live in a shared data repo (`data_repo` in `.specage/config.yaml`), one branch pair per project:
+`specages/<project>/spec` and `specages/<project>/trail`. Dispatch tags are `dispatch/<project>/<ts>` on the data repo.
+You never edit the spec branch. You write the trail branch only through `specage state commit`, once per session.
 Run the CLI with `npx --yes github:TheDeepestSpace/specage#v0 <cmd>` (call it `specage` below).
 
 ## Session
 
-1. `git fetch origin spec spec-state --tags`. Read `.specage/config.yaml`, `.specage/policy.yaml` and `GRAMMAR.md` from `origin/spec`. Check out `spec-state` in a separate worktree.
-2. `specage diff --from dispatch/latest --to <tag> --spec-file <spec_file> --json`. If `entries` is empty, write the report and stop.
+1. Clone the data repo named in the dispatch message: `git clone --branch specages/<project>/spec <data_repo>` then `git fetch origin specages/<project>/trail --tags`. Read `.specage/config.yaml`, `.specage/policy.yaml` and `GRAMMAR.md` from the spec branch. Check out `specages/<project>/trail` in a separate worktree. The project's code repo is `repo` in the config; issues and PRs are filed there.
+2. In the data repo clone: `specage diff --from dispatch/latest --to <tag> --spec-file <spec_file> --project <project> --json`. If `entries` is empty, write the report and stop.
 3. **Sync.** Scan PRs merged since the cursor for `Spec: <id>@<hash>` commit trailers or PR-body lines. Mark those claims `done`, set the work item to `merged`, add `pr` evidence to the trace.
 4. **Reconcile** every entry (ladder below).
 5. **Group** gaps into work items and file issues.
@@ -66,7 +68,7 @@ Outbox entry (`outbox/<id>.json`, immutable, never edited or deleted):
 
 For sessions working a filed issue:
 
-- Change only code and tests. Never write to `spec` or `spec-state`.
+- Change only code and tests. Never write to the data repo's spec or trail branches.
 - Add a trailer `Spec: <id>@<hash>` per completed claim to the final commit. For a claim deliberately left unfinished, put `Spec-Release: <id>` in the PR body.
 - Open the PR with `Closes #N` and request review from `reviewer` in the config.
 

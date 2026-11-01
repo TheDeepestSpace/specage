@@ -15,6 +15,8 @@ export interface Env {
   devGithubToken?: string;
   authorName: string;
   authorEmail: string;
+  /** owner/repo of the shared data repo holding the specages/<project>/{spec,trail} branches */
+  dataRepo: string;
   dbPath: string;
   webDist: string;
 }
@@ -40,6 +42,9 @@ export function loadEnv(e: NodeJS.ProcessEnv = process.env): Env {
   if (secret.length !== 32) throw new Error('SESSION_SECRET must be 32 bytes, base64');
   if (!dev && url.protocol !== 'https:')
     throw new Error('PUBLIC_URL must be https outside development');
+  const dataRepo = e.SPECAGE_DATA_REPO ?? 'TheDeepestSpace/specage-data';
+  if (!/^[\w.-]+\/[\w.-]+$/.test(dataRepo))
+    throw new Error('SPECAGE_DATA_REPO must be <owner>/<repo>');
   const here = dirname(fileURLToPath(import.meta.url));
   return {
     nodeEnv: e.NODE_ENV ?? 'production',
@@ -55,6 +60,7 @@ export function loadEnv(e: NodeJS.ProcessEnv = process.env): Env {
     devGithubToken: e.DEV_GITHUB_TOKEN,
     authorName: e.AUTHOR_NAME ?? 'specage',
     authorEmail: e.AUTHOR_EMAIL ?? 'specage@users.noreply.github.com',
+    dataRepo,
     dbPath: e.DB_PATH ?? (dev ? resolve('specage-dev.db') : '/data/specage.db'),
     webDist: resolve(e.WEB_DIST ?? join(here, '..', '..', 'web', 'dist')),
   };

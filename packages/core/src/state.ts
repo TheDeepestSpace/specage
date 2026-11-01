@@ -63,7 +63,7 @@ export function parseState(raw: { trace?: unknown; work?: unknown; questions?: u
   };
 }
 
-/** Load and validate a spec-state checkout directory. */
+/** Load and validate a trail-branch checkout directory. */
 export function loadState(dir: string) {
   const r = parseState({
     trace: readYaml(join(dir, 'trace.yaml')),
