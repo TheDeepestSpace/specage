@@ -242,6 +242,12 @@ export async function renderEditor(root: HTMLElement, repo: string) {
     h('div', { class: 'split' }, editorEl, paneEl),
   );
 
+  // the split fills the viewport below the (possibly wrapped) header
+  const topEl = root.querySelector('header.top') as HTMLElement;
+  const fitTop = () => root.style.setProperty('--top-h', `${topEl.offsetHeight}px`);
+  fitTop();
+  addEventListener('resize', fitTop);
+
   const dirty = () => view.state.doc.toString() !== baseText;
   const refreshButtons = () => {
     saveBtn.disabled = !dirty();

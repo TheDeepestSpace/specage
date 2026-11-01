@@ -17,6 +17,7 @@
     "dev": "NODE_ENV=development node packages/server/dist/index.js",
     "prepare": "npm run build",
     "dev:fake": "NODE_ENV=development OWNER_PUBKEY=\"$(cat ~/.ssh/id_ed25519.pub)\" node packages/server/dist/e2e-server.js",
+    "e2e:visual": "npm run build -w @specage/web && playwright test -c packages/web/visual/playwright.config.ts",
     "e2e": "npm run build && playwright test -c packages/web/playwright.config.ts",
     "bundle": "esbuild packages/cli/src/bin.ts --bundle --platform=node --format=esm --target=node22 --outfile=packages/cli/bundle/specage.js --banner:js=\"import {createRequire as __cr} from 'node:module'; const require = __cr(import.meta.url);\""
   },

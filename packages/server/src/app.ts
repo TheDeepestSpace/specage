@@ -103,6 +103,8 @@ export function createApp({ env, db, github, now = Date.now }: Deps) {
       'Content-Security-Policy',
       [
         "default-src 'self'",
+        // CodeMirror (style-mod) injects <style> elements at runtime
+        "style-src 'self' 'unsafe-inline'",
         "connect-src 'self'",
         "img-src 'self' https://*.githubusercontent.com https://github.com",
         "media-src 'self' https://*.githubusercontent.com",

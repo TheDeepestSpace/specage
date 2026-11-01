@@ -42,3 +42,7 @@ The project name currently equals the repo name; Pages publishing is off.
 **One-time webhook setup:** in the specage App settings enable the webhook, set its URL to the worker's URL, set the same secret as the worker's webhook secret, subscribe to **Push** events, and add the data repo to the worker's allowlist. Pushes made outside the server (plain `git push`) reach the worker but are dispatched the same way.
 
 **Not covered by this path:** outbox fan-out (`specage-trail.yml`, needs a token and the App's Workflows permission) and Pages publishing are no longer provisioned by init.
+
+## Visual tests
+
+See [CONTRIBUTING.md](CONTRIBUTING.md#visual-snapshots) for the Playwright visual tests and how to update snapshots.
