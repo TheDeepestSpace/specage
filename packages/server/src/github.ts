@@ -180,6 +180,7 @@ export class RealGitHub implements GitHub {
 
   async listProjects(): Promise<string[]> {
     const r = await this.repoReq('GET', '/git/matching-refs/heads/specages/');
+    if (r.status === 409) return []; // empty repo: no commits/refs yet
     if (!r.ok) throw new Error(`GitHub ${r.status}`);
     return ((await r.json()) as any[])
       .map((x) => /^refs\/heads\/specages\/(.+)\/spec$/.exec(x.ref)?.[1])
