@@ -1,11 +1,5 @@
 name: Update visual snapshots
-on:
-  workflow_dispatch:
-  # Bootstrap: generate baselines on this PR branch (remove once snapshots are committed).
-  # The commit only touches __screenshots__, which is ignored here, so it can't loop.
-  push:
-    branches: [fix/editor-layout-playwright]
-    paths-ignore: ['packages/web/visual/__screenshots__/**']
+on: workflow_dispatch
 permissions:
   contents: write
 jobs:
