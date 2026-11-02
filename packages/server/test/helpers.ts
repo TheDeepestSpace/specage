@@ -137,8 +137,6 @@ export function testEnv(ownerPubkey: string): Env {
     secureCookies: true,
     sessionSecret: Buffer.alloc(32, 9),
     ownerPubkey,
-    authorName: 'Owner',
-    authorEmail: 'o@example.com',
     dataRepo: 'o/specage-data',
     internRepo: 'o/the-intern',
     dbPath: ':memory:',

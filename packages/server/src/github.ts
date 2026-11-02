@@ -56,7 +56,6 @@ export interface GitHub {
       content: string;
       message: string;
       parentSha: string;
-      author: { name: string; email: string };
     },
   ): Promise<string>;
 }
@@ -317,13 +316,11 @@ export class RealGitHub implements GitHub {
       tree.push({ path, mode: '100644', type: 'blob', sha: blob.sha });
     }
     const t = await must(await this.repoReq('POST', '/git/trees', { tree }));
-    const author = { name: 'specage', email: 'specage@users.noreply.github.com' };
     const commit = await must(
       await this.repoReq('POST', '/git/commits', {
         message,
         tree: t.sha,
         parents: [],
-        author: { ...author, date: new Date(this.now()).toISOString() },
       }),
     );
     const u = await this.repoReq('POST', '/git/refs', {
@@ -342,7 +339,6 @@ export class RealGitHub implements GitHub {
       content: string;
       message: string;
       parentSha: string;
-      author: { name: string; email: string };
     },
   ) {
     const must = async (r: Response) => {
@@ -364,7 +360,6 @@ export class RealGitHub implements GitHub {
         message: o.message,
         tree: tree.sha,
         parents: [o.parentSha],
-        author: { ...o.author, date: new Date(this.now()).toISOString() },
       }),
     );
     const u = await this.repoReq('PATCH', `/git/refs/heads/${specBranch(project)}`, {

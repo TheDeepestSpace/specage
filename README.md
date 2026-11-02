@@ -39,6 +39,8 @@ The project name currently equals the repo name; Pages publishing is off.
 
 **Dispatch on commit:** saving in the editor commits to `specages/<project>/spec`. The server lints on save and commits; it files no issue. The cursor is the last dispatched commit, stored as the ref `refs/specage/dispatched/<project>` in the data repo (replaces `dispatch/*` tags). The agent diffs from the cursor to the dispatched sha and advances the cursor itself once it has handled the dispatch (see `protocol/PROTOCOL.md`). The App's `push` webhook goes to the-intern's Cloudflare worker (see the-intern#253), which verifies it and runs `dispatcher.yml` with `Run the specage dispatch for commit <sha>`.
 
+**Commit identity:** the server sends no `author`/`committer` on git commits, so GitHub attributes them to the installation token's bot: login `<app-slug>[bot]`, email `<bot-id>+<app-slug>[bot]@users.noreply.github.com` (look up the id with `GET /users/<app-slug>[bot]`). The-intern worker's `SPECAGE_BOT_LOGIN` must be exactly that login, since it only dispatches pushes whose sender matches.
+
 **One-time webhook setup:** in the specage App settings enable the webhook, set its URL to the worker's URL, set the same secret as the worker's webhook secret, subscribe to **Push** events, and add the data repo to the worker's allowlist. Pushes made outside the server (plain `git push`) reach the worker but are dispatched the same way.
 
 **Not covered by this path:** outbox fan-out (`specage-trail.yml`, needs a token and the App's Workflows permission) and Pages publishing are no longer provisioned by init.

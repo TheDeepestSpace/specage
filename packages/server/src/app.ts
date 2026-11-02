@@ -498,7 +498,6 @@ export function createApp({ env, db, github, now = Date.now }: Deps) {
         content: body.content,
         message,
         parentSha: head!,
-        author: { name: env.authorName, email: env.authorEmail },
       });
       db.audit('save', `${owner}/${repo}`, 'ok');
       return c.json({ head_sha: sha, diagnostics: diags });
