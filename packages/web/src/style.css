@@ -427,6 +427,14 @@ pre {
   color: var(--acc);
   font-weight: 600;
 }
+.cm-spec-ref {
+  color: var(--acc);
+  text-decoration: underline dotted;
+}
+.cm-ref-tip {
+  padding: 0.25rem 0.5rem;
+  max-width: 28rem;
+}
 .cm-spec-comment {
   color: var(--mut);
   font-style: italic;

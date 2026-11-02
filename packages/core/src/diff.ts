@@ -28,6 +28,8 @@ export type DiffEntry =
 export interface SpecDiff {
   entries: DiffEntry[];
   subtree_changed: string[];
+  /** Unchanged statements whose `$id` refs (transitively) point at a changed/removed/renamed statement */
+  stale_dependents: { id: string; because: string[] }[];
 }
 
 const side = (n: SpecNode): Side => ({
@@ -51,6 +53,44 @@ export function similarity(a: string, b: string): number {
     prev = cur;
   }
   return 1 - prev[n] / Math.max(m, n);
+}
+
+/** Statements that reference (directly or transitively via `$id`) something that changed. */
+function staleDependents(entries: DiffEntry[], newSpec: Spec): { id: string; because: string[] }[] {
+  const touched = new Set<string>();
+  const direct = new Set<string>();
+  for (const e of entries) {
+    if (e.kind === 'changed' || e.kind === 'removed') touched.add(e.id);
+    else if (e.kind === 'renamed') {
+      touched.add(e.from);
+      if (e.text_changed) touched.add(e.id);
+    } else if (e.kind === 'split') touched.add(e.from);
+    else if (e.kind === 'merged') e.from.forEach((f) => touched.add(f));
+    if (e.kind === 'changed' || e.kind === 'added' || e.kind === 'renamed') direct.add(e.id);
+    if (e.kind === 'split') e.ids.forEach((i) => direct.add(i));
+    if (e.kind === 'merged') direct.add(e.id);
+  }
+  // reverse graph: ref target -> dependents; walk from each root cause
+  const nodes = flatten(newSpec);
+  const dependents = new Map<string, string[]>();
+  for (const n of nodes)
+    for (const r of n.refs) if (r !== n.id) dependents.set(r, [...(dependents.get(r) ?? []), n.id]);
+  const because = new Map<string, Set<string>>();
+  for (const root of touched) {
+    const seen = new Set([root]);
+    const queue = [root];
+    while (queue.length) {
+      for (const d of dependents.get(queue.shift()!) ?? []) {
+        if (seen.has(d)) continue;
+        seen.add(d);
+        queue.push(d);
+        because.set(d, (because.get(d) ?? new Set()).add(root));
+      }
+    }
+  }
+  return nodes
+    .filter((n) => because.has(n.id) && !direct.has(n.id))
+    .map((n) => ({ id: n.id, because: [...because.get(n.id)!] }));
 }
 
 export function diff(oldSpec: Spec, newSpec: Spec): SpecDiff {
@@ -162,7 +202,7 @@ export function diff(oldSpec: Spec, newSpec: Spec): SpecDiff {
       (lineageSrc.get(n.id)?.length === 1 ? oldIdx.get(lineageSrc.get(n.id)![0]) : undefined);
     if (!o || o.subtreeHash !== n.subtreeHash) subtree.push(n.id);
   }
-  return { entries, subtree_changed: subtree };
+  return { entries, subtree_changed: subtree, stale_dependents: staleDependents(entries, newSpec) };
 }
 
 export function summarize(d: SpecDiff): string {

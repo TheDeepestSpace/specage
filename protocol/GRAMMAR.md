@@ -30,6 +30,15 @@ text      = [ marker ] , prose ;
 - IDs are unique and never reused. A removed node's ID is retired in `trace.yaml` on the project's trail branch.
 - A moved node keeps its ID.
 
+## References
+
+`$id` inside a statement's text references another statement by ID: `frontend @fe;` and `$fe is hosted on GH Pages @infra;`.
+
+- A reference is `$` followed by an ID (`/[a-z][a-z0-9_-]*(\.[a-z][a-z0-9_-]*)*/`), not preceded by a word character or `$`. `$5` and `$Home` are plain text.
+- References resolve against explicit IDs only. Derived names are unstable, so don't reference them.
+- References are part of the prose (they are hashed) and form a dependency graph. When a referenced statement changes, is removed, renamed, split or merged, everything that references it, directly or transitively, is reported as a stale dependent (`stale_dependents` in the diff) for the agent to re-evaluate.
+- Unresolved references and self-references are warnings (W107, W108).
+
 ## Markers
 
 First token of a leaf's text. Blocks carry none in v0.
@@ -78,5 +87,7 @@ Remove the `<-` clause after one dispatch has consumed it.
 | W104 | warn | Unknown `!proof` kind |
 | W105 | warn | `<-` survived the dispatch that consumed it (needs `--state`) |
 | W106 | warn | Marker on a block (ignored) |
+| W107 | warn | `$id` reference to an ID that doesn't exist |
+| W108 | warn | Statement references itself |
 
 Run `specage lint <file>`; add `--json` for machine output.
