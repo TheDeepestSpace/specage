@@ -16,6 +16,11 @@ import {
   lint,
   parse,
   parseState,
+  parseComments,
+  stringifyComments,
+  mergeThreads,
+  applyOp,
+  CommentError,
   flatten,
   parseYaml,
 } from '@specage/core';
@@ -62,6 +67,8 @@ export interface Deps {
   github: GitHub;
   now?: () => number;
 }
+
+const COMMENTS_FILE = 'comments.yaml';
 
 export function createApp({ env, db, github, now = Date.now }: Deps) {
   const app = new Hono();
@@ -444,8 +451,10 @@ export function createApp({ env, db, github, now = Date.now }: Deps) {
       trace: await f('trace.yaml'),
       work: await f('work.yaml'),
       questions: await f('questions.yaml'),
+      thread_events: await f('thread-events.yaml'),
     });
-    return c.json({ ...state, report: null });
+    const { threads } = parseComments(await github.getFile(COMMENTS_FILE, specBranch(repo)));
+    return c.json({ ...state, threads: mergeThreads(threads, state.thread_events), report: null });
   });
 
   const rateLimit = (c: Context): Response | null => {
@@ -458,6 +467,65 @@ export function createApp({ env, db, github, now = Date.now }: Deps) {
     writes.set(k, recent);
     return null;
   };
+
+  // Comment threads: one commit of comments.yaml on the spec branch per operation (same commit
+  // path as a spec save). Retries on a moved branch since ops are commutative appends/flips.
+  app.post('/api/r/:owner/:repo/comments', async (c) => {
+    const { owner, repo } = c.req.param();
+    const limited = rateLimit(c);
+    if (limited) return limited;
+    const op = await c.req.json().catch(() => null);
+    if (
+      !op ||
+      typeof op.op !== 'string' ||
+      !['create', 'reply', 'resolve', 'reopen'].includes(op.op)
+    )
+      return c.json({ error: 'bad op' }, 400);
+    const str = (v: unknown) => (typeof v === 'string' ? v : '');
+    const clean =
+      op.op === 'create'
+        ? { op: 'create' as const, node: str(op.node), node_hash: '', body: str(op.body) }
+        : op.op === 'reply'
+          ? { op: 'reply' as const, thread: str(op.thread), body: str(op.body) }
+          : { op: op.op as 'resolve' | 'reopen', thread: str(op.thread) };
+    const author = db.cred(sess(c).cid)?.label ?? 'owner';
+    const path = cfgOf(c).spec_file;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const head = await github.getRef(`heads/${specBranch(repo)}`);
+      if (!head) return c.json({ error: 'spec not found' }, 404);
+      const specText = (await github.getFile(path, specBranch(repo))) ?? '';
+      const hashes: Record<string, string> = {};
+      for (const n of flatten(parse(specText))) if (n.id) hashes[n.id] = n.hash;
+      const cur = parseComments(await github.getFile(COMMENTS_FILE, specBranch(repo)));
+      if (cur.issues.length) return c.json({ error: 'comments.yaml is invalid' }, 422);
+      let next;
+      try {
+        next = applyOp(cur.threads, clean, author, new Date(now()).toISOString(), hashes);
+      } catch (e) {
+        if (e instanceof CommentError) return c.json({ error: e.message }, 400);
+        throw e;
+      }
+      try {
+        await github.commitSpec(repo, {
+          path: COMMENTS_FILE,
+          content: stringifyComments(next),
+          message: `comments: ${clean.op}${'thread' in clean ? ` ${clean.thread}` : ` on ${clean.node}`}`,
+          parentSha: head,
+        });
+        db.audit('comment', `${owner}/${repo}`, 'ok');
+        const events = parseState({
+          thread_events: await github
+            .getFile('thread-events.yaml', trailBranch(repo))
+            .then((t) => (t === null ? undefined : parseYaml(t))),
+        }).state.thread_events;
+        return c.json({ threads: mergeThreads(next, events) });
+      } catch (e) {
+        if (!(e instanceof Conflict)) throw e;
+      }
+    }
+    db.audit('comment', `${owner}/${repo}`, '409');
+    return c.json({ error: 'conflict, try again' }, 409);
+  });
 
   app.put('/api/r/:owner/:repo/spec', async (c) => {
     const { owner, repo } = c.req.param();

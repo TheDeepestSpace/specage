@@ -1,8 +1,8 @@
 import { expect, test, type Page } from '@playwright/test';
-import { mockApi } from './mocks.js';
+import { mockApi, THREADS } from './mocks.js';
 
-async function openEditor(page: Page, spec?: string, text = 'Shooting') {
-  await mockApi(page, { spec });
+async function openEditor(page: Page, spec?: string, text = 'Shooting', threads?: unknown[]) {
+  await mockApi(page, { spec, threads });
   await page.goto('/r/acme/tbgwaf');
   await expect(page.locator('.cm-content')).toContainText(text);
   await expect(page.locator('.cm-gutters')).toBeVisible();
@@ -191,4 +191,26 @@ test('editor: Tab stays in the editor; completion popup is visible and themed', 
   await expect(tip).toBeHidden();
   await page.keyboard.press('Tab');
   await expect(content).not.toBeFocused();
+});
+
+test('comments: marker, thread popover, resolve/reopen filter, new thread', async ({ page }) => {
+  await openEditor(page, undefined, 'Shooting', THREADS);
+  await expect(page.locator('.cmt-marker[data-count="1"]')).toBeVisible();
+  // put the cursor on the commented node
+  await page.locator('.cm-line', { hasText: '@shoot.burst.cap' }).first().click();
+  const panel = page.locator('#threads');
+  await expect(panel.locator('.thread')).toHaveCount(1); // default filter: open
+  await expect(panel).toContainText('Is 3 the right cap?');
+  await expect(panel).toContainText('Matches GameLogic.h.');
+  await expect(panel).not.toContainText('Typo in text.');
+  await panel.locator('.th-filter').selectOption('resolved');
+  await expect(panel).toContainText('Typo in text.');
+  await panel.getByRole('button', { name: 'Reopen' }).click();
+  await panel.locator('.th-filter').selectOption('open');
+  await expect(panel.locator('.thread')).toHaveCount(2);
+  await panel.getByRole('button', { name: 'Resolve' }).first().click();
+  await expect(panel.locator('.thread')).toHaveCount(1);
+  await panel.locator('textarea').last().fill('Another thought');
+  await panel.locator('#new-thread').click();
+  await expect(panel).toContainText('Another thought');
 });

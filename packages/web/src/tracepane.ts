@@ -1,12 +1,15 @@
-import { nodeStatus, type SpecNode, type State } from '@specage/core/browser';
+import { nodeStatus, type SpecNode, type State, type Thread } from '@specage/core/browser';
 import { ancestors, type Analysis } from './analysis.js';
 import { evidenceView } from './evidence.js';
 import { h } from './dom.js';
+import { threadsPanel } from './threads.js';
 import { bodyText, chip } from './viewer.js';
 
 export interface PaneCtx {
   repo: string;
   state: State;
+  threads: Thread[];
+  onThreads(t: Thread[]): void;
   goto(n: SpecNode): void;
 }
 
@@ -107,6 +110,13 @@ export function renderPane(
       h('h4', {}, 'Questions'),
       ...qs.map((q) => h('div', { class: 'question' }, h('strong', {}, `${q.kind}: `), q.text)),
     );
+  body.append(
+    threadsPanel(
+      n as { id: string; hash: string },
+      { repo: ctx.repo, threads: ctx.threads, onChange: ctx.onThreads },
+      () => renderPane(el, a, n, ctx, pinned, onPin),
+    ),
+  );
   const proofs = proofsUnder(n);
   if (proofs.length)
     body.append(

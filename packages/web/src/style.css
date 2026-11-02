@@ -561,3 +561,41 @@ body .cm-tooltip.cm-tooltip-autocomplete {
   color: var(--fg);
   border: 1px solid var(--line);
 }
+
+/* ---- comment threads ---- */
+.cmt-marker {
+  display: inline-block;
+  min-width: 1.2em;
+  padding: 0 0.3em;
+  border-radius: 999px;
+  background: var(--acc);
+  color: var(--bg, #fff);
+  font-size: 0.7rem;
+  line-height: 1.3em;
+  text-align: center;
+}
+.thread {
+  border-left: 3px solid var(--acc);
+  padding: 0.2rem 0.6rem;
+  margin: 0.4rem 0;
+  background: var(--card);
+}
+.thread.th-resolved {
+  border-left-color: var(--c-verified, #3a3);
+  opacity: 0.75;
+}
+.thread-head,
+.cmeta {
+  font-size: 0.75rem;
+  opacity: 0.75;
+}
+.cbody {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.threads textarea {
+  width: 100%;
+  box-sizing: border-box;
+  margin: 0.25rem 0;
+  font: inherit;
+}

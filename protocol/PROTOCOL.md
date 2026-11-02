@@ -14,7 +14,7 @@ Run the CLI with `npx --yes github:TheDeepestSpace/specage#v0 <cmd>` (call it `s
 3. **Sync.** Scan PRs merged since the cursor for `Spec: <id>@<hash>` commit trailers or PR-body lines. Mark those claims `done`, set the work item to `merged`, add `pr` evidence to the trace.
 4. **Reconcile** every entry (ladder below).
 5. **Group** gaps into work items and file issues.
-6. Write `trace.yaml`, `work.yaml`, `questions.yaml`, `dispatches/<tag>.md` and any `outbox/` entries. Run `specage state validate`, then `specage state commit -m "dispatch <tag>"`. One commit per session.
+6. Write `trace.yaml`, `work.yaml`, `questions.yaml`, `thread-events.yaml` (if you replied to or resolved threads), `dispatches/<tag>.md` and any `outbox/` entries. Run `specage state validate`, then `specage state commit -m "dispatch <tag>"`. One commit per session.
 7. Post the report where the dispatch was started, then **advance the cursor** only after everything above succeeded: `git push origin <sha>:refs/specage/dispatched/<project>` (create it if missing; fast-forward only, never force). If the session fails earlier, leave the cursor so the next dispatch re-diffs the same changes. The specage server never moves the cursor.
 
 ## Reconcile ladder
@@ -63,6 +63,15 @@ For sessions working a filed issue:
 - Change only code and tests. Never write to the data repo's spec or trail branches.
 - Add a trailer `Spec: <id>@<hash>` per completed claim to the final commit. For a claim deliberately left unfinished, put `Spec-Release: <id>` in the PR body.
 - Open the PR with `Closes #N` and request review from `reviewer` in the config.
+
+## Comment threads
+
+Humans comment on spec nodes in the editor. Threads are in `comments.yaml` on the **spec** branch (read-only for you): `threads: [{id, node, node_hash, state: open|resolved, comments: [{id, author, at, body}], resolved_by?, resolved_at?}]`.
+
+- At dispatch, read `comments.yaml` and treat every `open` thread on a node in the diff (or one that asks you something) as input. A thread whose `node_hash` differs from the node's current hash is about older text; say so rather than guessing.
+- You never edit `comments.yaml`. To answer, append events to `thread-events.yaml` on the trail branch (append-only list): `{thread, kind: reply|resolve|reopen, author: the-intern, at: <ISO ts>, body?}` (`body` required for `reply`). Resolve only when the thread is settled by the spec or code as it stands; otherwise reply.
+- Unknown thread IDs are ignored. Keep replies short.
+- `questions.yaml` is unchanged and still the channel for reconcile/rename/split questions; threads are for free-form discussion.
 
 ## Report (`dispatches/<tag>.md`)
 

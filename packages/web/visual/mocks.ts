@@ -37,7 +37,37 @@ export const STATE = {
   report: null,
 };
 
+export const THREADS = [
+  {
+    id: 't-0001',
+    node: 'shoot.burst.cap',
+    node_hash: hashOf('shoot.burst.cap'),
+    state: 'open',
+    comments: [
+      { id: 't-0001.1', author: 'owner', at: '2026-10-30T14:02:00Z', body: 'Is 3 the right cap?' },
+      {
+        id: 't-0001.2',
+        author: 'the-intern',
+        at: '2026-10-30T14:05:00Z',
+        body: 'Matches GameLogic.h.',
+      },
+    ],
+  },
+  {
+    id: 't-0002',
+    node: 'shoot.burst.cap',
+    node_hash: hashOf('shoot.burst.cap'),
+    state: 'resolved',
+    resolved_by: 'owner',
+    resolved_at: '2026-10-30T15:00:00Z',
+    comments: [
+      { id: 't-0002.1', author: 'owner', at: '2026-10-30T14:30:00Z', body: 'Typo in text.' },
+    ],
+  },
+];
+
 export interface MockOpts {
+  threads?: unknown[];
   repos?: string[];
   spec?: string;
   initRepos?: { repo: string; private: boolean; initialised: boolean }[];
@@ -66,7 +96,27 @@ export async function mockApi(page: Page, o: MockOpts = {}) {
         json({ content: o.spec ?? SPEC, head_sha: 'a'.repeat(40), path: 'tbgwaf.specage' }),
       );
     }
-    if (/\/api\/r\/[^/]+\/[^/]+\/state$/.test(u)) return r.fulfill(json(STATE));
+    if (/\/api\/r\/[^/]+\/[^/]+\/state$/.test(u))
+      return r.fulfill(json({ ...STATE, threads: o.threads ?? [] }));
+    if (/\/api\/r\/[^/]+\/[^/]+\/comments$/.test(u)) {
+      const op = r.request().postDataJSON();
+      const ts = JSON.parse(JSON.stringify(o.threads ?? [])) as any[];
+      const t = ts.find((x) => x.id === op.thread);
+      if (op.op === 'resolve') t.state = 'resolved';
+      if (op.op === 'reopen') t.state = 'open';
+      if (op.op === 'reply')
+        t.comments.push({ id: 'x', author: 'owner', at: '2026-10-31T00:00:00Z', body: op.body });
+      if (op.op === 'create')
+        ts.push({
+          id: 't-9',
+          node: op.node,
+          node_hash: 'a'.repeat(12),
+          state: 'open',
+          comments: [{ id: 't-9.1', author: 'owner', at: '2026-10-31T00:00:00Z', body: op.body }],
+        });
+      o.threads = ts;
+      return r.fulfill(json({ threads: ts }));
+    }
     return r.fulfill(json({ error: 'not mocked' }, 404));
   });
 }
