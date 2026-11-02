@@ -46,7 +46,7 @@ Discovery is biased toward "implemented", so be strict:
 Chosen by `policy.yaml`, not by your judgment. You only classify.
 
 - **refresh**: update the hash.
-- **amend**: rewrite the issue's generated "Spec" section with the claimed nodes' current text; append an amendment note; post **one** PR review comment listing every moved node (old -> new text, "claim the new hash"); write an outbox `amend` entry for the PR (the-intern ignores its own comments).
+- **amend**: rewrite the issue's generated "Spec" section with the claimed nodes' current text; append an amendment note; post **one** PR review comment listing every moved node (old -> new text, "claim the new hash"); end that comment with `@the-intern-bot amend the PR per the comment above` so the-intern is triggered (it does not ignore its own comments, so you can comment directly).
 - **ask**: open a question naming the options: amend, stack, follow-up, supersede, split.
 
 ## Grouping and filing
@@ -54,15 +54,7 @@ Chosen by `policy.yaml`, not by your judgment. You only classify.
 - Group gap nodes into one issue when they share a block and a code area, or only make sense together.
 - Issue body has a generated **Spec** section: each claimed leaf's current text, `id@hash`, and the spec commit SHA. List any `!constraint` / `!impl` / `!invariant` leaves in the same subtree as binding context, plus existing evidence.
 - Claims are on leaves. Expand a block request to its leaves.
-- If `auto_implement: true`, write an `implement` outbox entry per new issue.
-
-Outbox entry (`outbox/<id>.json`, immutable, never edited or deleted):
-
-```json
-{"id":"o-2026-10-30T02-15Z-001","kind":"implement","target":251,"body":"Implement the claims on issue #251 per .specage/PROTOCOL.md section Implement.","created":"2026-10-30T02:15:11Z"}
-```
-
-`kind`: implement | amend | answer | continue. `target`: issue or PR number.
+- If `auto_implement: true`, comment `@the-intern-bot implement the claims on this issue per .specage/PROTOCOL.md section Implement.` on each new issue right after filing it. Do not write outbox entries: the-intern does not ignore its own comments, so the mention dispatches directly.
 
 ## Implement
 
