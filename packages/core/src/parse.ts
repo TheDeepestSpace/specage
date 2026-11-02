@@ -3,6 +3,13 @@ import { normalize, sha12 } from './hash.js';
 
 export const MARKERS = ['constraint', 'impl', 'invariant', 'proof'] as const;
 export const PROOF_KINDS = ['video', 'screenshot', 'demo', 'snippet', 'transcript', 'walkthrough'];
+/** `$id` cross-reference inside statement text. */
+export const REF_RE = /(?<![\w$])\$([a-z][a-z0-9_-]*(?:\.[a-z][a-z0-9_-]*)*)/g;
+
+export function extractRefs(text: string): string[] {
+  return [...new Set([...text.matchAll(REF_RE)].map((m) => m[1]))];
+}
+
 const ID_RE = /^[a-z][a-z0-9_-]*(\.[a-z][a-z0-9_-]*)*$/;
 
 interface Raw {
@@ -222,6 +229,7 @@ class Parser {
       parent: parent ? parent.id : null,
       children: [],
       lineage,
+      refs: extractRefs(text),
       line: raw.line,
       column: raw.column,
       endLine: this.line,

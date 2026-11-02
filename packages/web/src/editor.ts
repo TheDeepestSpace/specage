@@ -29,6 +29,7 @@ import {
   ViewPlugin,
   drawSelection,
   gutter,
+  hoverTooltip,
   keymap,
   lineNumbers,
   type DecorationSet,
@@ -143,6 +144,7 @@ export async function renderEditor(root: HTMLElement, repo: string) {
       /(?<!\\)@[a-z][a-z0-9_.-]*(?:\s*<-\s*[a-z][a-z0-9_.-]*(?:\s*,\s*[a-z][a-z0-9_.-]*)*)?/g,
       'cm-spec-id',
     ],
+    [/(?<![\w$\\])\$[a-z][a-z0-9_-]*(?:\.[a-z][a-z0-9_-]*)*/g, 'cm-spec-ref'],
     [/(?<=(?:^|[;{}])\s*)(?:!\w+(?:[ \t]+\w+)?:|\?|>later:)/gm, 'cm-spec-marker'],
   ];
   const highlight = ViewPlugin.fromClass(
@@ -237,6 +239,54 @@ export async function renderEditor(root: HTMLElement, repo: string) {
       .filter((o) => o.label !== `@${prefix}` || !!prefix);
     return { from: m ? m.from : ctx.pos, options: opts, validFor: /^@[a-z0-9_.-]*$/ };
   };
+
+  // `$id` references: autocomplete, hover preview, Ctrl/Cmd-click to jump
+  const refCompletion = (ctx: CompletionContext): CompletionResult | null => {
+    const m = ctx.matchBefore(/(?<![\w$\\])\$[a-z0-9_.-]*/);
+    if (!m) return null;
+    const a = ctx.state.field(analysisField);
+    const options = a.nodes
+      .filter((n) => !n.derived)
+      .map((n) => ({ label: `$${n.id}`, detail: n.text.slice(0, 50), type: 'variable' }));
+    return { from: m.from, options, validFor: /^\$[a-z0-9_.-]*$/ };
+  };
+  const refAt = (st: EditorState, pos: number): { id: string; from: number; to: number } | null => {
+    const line = st.doc.lineAt(pos);
+    for (const m of line.text.matchAll(
+      /(?<![\w$\\])\$([a-z][a-z0-9_-]*(?:\.[a-z][a-z0-9_-]*)*)/g,
+    )) {
+      const from = line.from + m.index!;
+      if (pos >= from && pos <= from + m[0].length)
+        return { id: m[1], from, to: from + m[0].length };
+    }
+    return null;
+  };
+  const refTooltip = hoverTooltip((view, pos) => {
+    const r = refAt(view.state, pos);
+    if (!r) return null;
+    const n = view.state.field(analysisField).nodes.find((x) => !x.derived && x.id === r.id);
+    return {
+      pos: r.from,
+      end: r.to,
+      above: true,
+      create: () => ({
+        dom: h('div', { class: 'cm-ref-tip' }, n ? `${n.id}: ${n.text}` : `unresolved: ${r.id}`),
+      }),
+    };
+  });
+  const refJump = EditorView.domEventHandlers({
+    mousedown(e, view) {
+      if (!(e.ctrlKey || e.metaKey)) return false;
+      const pos = view.posAtCoords({ x: e.clientX, y: e.clientY });
+      const r = pos === null ? null : refAt(view.state, pos);
+      const n = r && view.state.field(analysisField).nodes.find((x) => !x.derived && x.id === r.id);
+      if (!n) return false;
+      const target = view.state.doc.line(Math.min(Math.max(n.line, 1), view.state.doc.lines));
+      view.dispatch({ selection: { anchor: target.from }, scrollIntoView: true });
+      view.focus();
+      return true;
+    },
+  });
 
   // ---- layout ----
   const status = h('span', { id: 'status', class: 'status', role: 'status' });
@@ -396,7 +446,12 @@ export async function renderEditor(root: HTMLElement, repo: string) {
         highlight,
         lintSource,
         lintGutter(),
-        autocompletion({ override: [idCompletion, markerCompletion], defaultKeymap: true }),
+        refTooltip,
+        refJump,
+        autocompletion({
+          override: [idCompletion, refCompletion, markerCompletion],
+          defaultKeymap: true,
+        }),
         EditorView.lineWrapping,
         // highest precedence: the completion keymap swallows Escape while its popup is open
         Prec.highest(

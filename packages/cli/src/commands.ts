@@ -41,6 +41,7 @@ function nodeSummary(n: SpecNode): any {
     subtree_hash: n.subtreeHash,
     parent: n.parent,
     lineage: n.lineage,
+    refs: n.refs,
     line: n.line,
     children: n.children.map(nodeSummary),
   };

@@ -243,3 +243,34 @@ describe('yaml hashes', () => {
     expect(issues).toEqual([]);
   });
 });
+
+describe('$id references', () => {
+  const src = 'frontend @fe; $fe is hosted on GH Pages @infra; costs $5 and $Home @x;';
+  it('extracts refs', () => {
+    const n = flatten(parse(src));
+    expect(n.find((x) => x.id === 'infra')!.refs).toEqual(['fe']);
+    expect(n.find((x) => x.id === 'x')!.refs).toEqual([]);
+  });
+  it('dedupes and handles dotted ids and trailing punctuation', () => {
+    const n = flatten(parse('see $a.b, $a.b and $c-d. @z;'));
+    expect(n[0].refs).toEqual(['a.b', 'c-d']);
+  });
+  it('W107 unresolved, W108 self', () => {
+    const codes = lint(parse('x $nope @a; y $b @b;')).map((d) => d.code);
+    expect(codes).toContain('W107');
+    expect(codes).toContain('W108');
+    expect(lint(parse(src)).map((d) => d.code)).not.toContain('W107');
+  });
+  it('resolves explicit ids only; refs to derived names warn', () => {
+    expect(lint(parse('a b c; see $s-12345678 @r;')).map((d) => d.code)).toContain('W107');
+  });
+  it('flags transitive dependents of changed statements', () => {
+    const o = 'a @a; uses $a @b; uses $b @c; other @d;';
+    const r = diff(parse(o), parse(o.replace('a @a', 'a2 @a')));
+    expect(r.stale_dependents).toEqual([
+      { id: 'b', because: ['a'] },
+      { id: 'c', because: ['a'] },
+    ]);
+    expect(diff(parse(o), parse(o)).stale_dependents).toEqual([]);
+  });
+});
