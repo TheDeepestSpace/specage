@@ -62,7 +62,21 @@ For sessions working a filed issue:
 
 - Change only code and tests. Never write to the data repo's spec or trail branches.
 - Add a trailer `Spec: <id>@<hash>` per completed claim to the final commit. For a claim deliberately left unfinished, put `Spec-Release: <id>` in the PR body.
-- Open the PR with `Closes #N` and request review from `reviewer` in the config.
+- Open the PR with `Closes #N` and request review from `the-intern-bot[bot]` (e.g. `gh pr create --reviewer the-intern-bot ...`). Never assign or request review from the human owner (`reviewer` in the config); that is the reviewer's job after approval.
+
+## Review
+
+For sessions dispatched by a review request on an implement PR (the PR body has `Closes #N` and `Spec:` trailers/lines):
+
+- Read the linked issue's **Spec** section and the claimed `id@hash` list. Read the diff, the PR body and the commit trailers.
+- Check:
+  - **Spec**: every claimed leaf is satisfied by the change, and `!constraint` / `!impl` / `!invariant` context is respected. Nothing out of scope.
+  - **Trailers**: each completed claim has `Spec: <id>@<hash>` on the final commit with the current hash; each unfinished claim is listed as `Spec-Release: <id>` in the PR body. No trailer without matching code.
+  - **Tests**: behavior of each claim is asserted by a test; tests and lint were run and pass.
+  - **Trail consistency**: claims and hashes match `trace.yaml` / `work.yaml` on the trail branch (read-only); flag moved hashes (see Actions: amend).
+- Report as a PR review from `the-intern-bot[bot]`: `approve` if all checks pass, otherwise `request changes` with a terse list of findings, each naming the claim id or file. Do not write to the spec or trail branches.
+- On approval, request review from the human owner (`reviewer` in the config) so they remain the final merger. Never merge.
+- **Amend / follow-up**: on `request changes`, the implement agent amends the same PR (new commits, no new PR) and re-requests review from `the-intern-bot[bot]`. Out-of-scope or newly found gaps go to a follow-up issue, not this PR. Ignore reviews and pushes authored by the bot itself, and stop after 3 review rounds by asking the human owner to take over.
 
 ## Comment threads
 

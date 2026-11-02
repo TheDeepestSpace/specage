@@ -262,7 +262,7 @@ need the workflow on the default branch, so this design avoids them until P6.
 specage_version: v0
 project: tbgwaf
 spec_file: tbgwaf.specage
-reviewer: TheDeepestSpace            # requested on PRs, signs off proofs
+reviewer: TheDeepestSpace            # human owner: requested after the-intern approves; signs off proofs
 intern:
   repo: TheDeepestSpace/the-intern
   workflow: dispatcher.yml
@@ -500,7 +500,9 @@ automatically.
   - add a trailer `Spec: <id>@<hash>` per completed claim to the final
     commit, or a `Spec-Release: <id>` line in the PR body for a claim they
     deliberately leave unfinished;
-  - open the PR with `Closes #N` and request review from `reviewer`.
+  - open the PR with `Closes #N` and request review from `the-intern-bot[bot]`
+    (never the human `reviewer`; the-intern's review dispatch requests them
+    after approving, see PROTOCOL `Review`).
 
 ---
 
@@ -525,8 +527,8 @@ stop and report.
 - The agent runs in `ghcr.io/<owner>/<repo>-dev:latest` if that image
   exists, otherwise in a fallback image. Each session is fresh; continuity
   comes from per-issue summaries the-intern stores itself.
-- The shared style already makes PRs request review from `TheDeepestSpace`
-  and use `Closes #N`.
+- Specage implement PRs request review from `the-intern-bot[bot]` (which
+  triggers a review dispatch) and use `Closes #N`.
 - **Gating**: issue and PR comments trigger the bot only from
   `ALLOWED_USERS` and only with an `@the-intern-bot` mention, **or** for a
   non-bot comment on a bot-authored thread. **Comments the bot posts itself
