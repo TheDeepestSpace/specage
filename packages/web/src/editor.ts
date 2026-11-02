@@ -36,7 +36,7 @@ import {
   type ViewUpdate,
 } from '@codemirror/view';
 import { Vim, getCM, vim } from '@replit/codemirror-vim';
-import { diff as coreDiff, lint, parse, type State } from '@specage/core/browser';
+import { diff as coreDiff, lint, parse, type State, type Thread } from '@specage/core/browser';
 import { api, ApiError, loadMe } from './api.js';
 import { analyse, dotStatus, nodeAtLine, slug, type Analysis } from './analysis.js';
 import { conflictDialog } from './conflict.js';
@@ -44,6 +44,7 @@ import { h, store } from './dom.js';
 import grammarSrc from '../../../protocol/GRAMMAR.md?raw';
 import { renderMarkdown } from './markdown.js';
 import { renderPane } from './tracepane.js';
+import { openCount } from './threads.js';
 import { aggregateText } from './viewer.js';
 
 const VIM_KEY = 'editor-vim';
@@ -55,6 +56,7 @@ const emptyState = (): State => ({
   trace: { retired_ids: [], consumed_lineage: [], nodes: {} },
   work: { items: [] },
   questions: [],
+  thread_events: [],
 });
 
 export async function renderEditor(root: HTMLElement, repo: string) {
@@ -65,12 +67,19 @@ export async function renderEditor(root: HTMLElement, repo: string) {
   }
   let spec: { content: string; head_sha: string; path: string };
   let state: State = emptyState();
+  let threads: Thread[] = [];
   try {
     [spec, state] = await Promise.all([
       api('GET', `/api/r/${repo}/spec`),
-      api('GET', `/api/r/${repo}/state`).then(
-        (s: any) => ({ trace: s.trace, work: s.work, questions: s.questions }) as State,
-      ),
+      api('GET', `/api/r/${repo}/state`).then((s: any) => {
+        threads = s.threads ?? [];
+        return {
+          trace: s.trace,
+          work: s.work,
+          questions: s.questions,
+          thread_events: [],
+        } as State;
+      }),
     ]);
   } catch (e: any) {
     root.replaceChildren(h('p', { class: 'error' }, `Cannot open ${repo}: ${e.message}`));
@@ -112,6 +121,33 @@ export async function renderEditor(root: HTMLElement, repo: string) {
     },
     lineMarkerChange: (u) => u.transactions.some((t) => t.effects.some((e) => e.is(setState))),
     initialSpacer: () => new Dot('unknown'),
+  });
+
+  class Bubble extends GutterMarker {
+    constructor(readonly n: number) {
+      super();
+    }
+    eq(o: Bubble) {
+      return o.n === this.n;
+    }
+    toDOM() {
+      const s = document.createElement('span');
+      s.className = 'cmt-marker';
+      s.dataset.count = String(this.n);
+      s.title = `${this.n} open comment thread${this.n > 1 ? 's' : ''}`;
+      s.textContent = String(this.n);
+      return s;
+    }
+  }
+  const commentGutter = gutter({
+    class: 'cm-comment-gutter',
+    lineMarker(view, line) {
+      const a = view.state.field(analysisField);
+      const n = a.byLine.get(view.state.doc.lineAt(line.from).number);
+      const c = n && n.id ? openCount(threads, n.id) : 0;
+      return c ? new Bubble(c) : null;
+    },
+    lineMarkerChange: (u) => u.transactions.some((t) => t.effects.some((e) => e.is(setState))),
   });
 
   const foldBySpec = foldService.of((st, from, to) => {
@@ -381,6 +417,12 @@ export async function renderEditor(root: HTMLElement, repo: string) {
       {
         repo,
         state,
+        threads,
+        onThreads(t) {
+          threads = t;
+          view.dispatch({ effects: setState.of(null) });
+          paneUpdate();
+        },
         goto(t) {
           const line = view.state.doc.line(Math.min(t.line, view.state.doc.lines));
           view.dispatch({ selection: { anchor: line.from }, scrollIntoView: true });
@@ -439,6 +481,7 @@ export async function renderEditor(root: HTMLElement, repo: string) {
         analysisField,
         lineNumbers(),
         statusGutter,
+        commentGutter,
         foldGutter(),
         foldBySpec,
         folding,

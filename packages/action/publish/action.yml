@@ -35,7 +35,7 @@ runs:
       run: |
         set -euo pipefail
         npx --yes "${{ inputs.cli }}" render --spec "$RUNNER_TEMP/spec/${{ inputs.spec-file }}" \
-          --state "$RUNNER_TEMP/state" --out "$RUNNER_TEMP/site" --project "${{ inputs.project }}" \
+          --state "$RUNNER_TEMP/state" --comments "$RUNNER_TEMP/spec/comments.yaml" --out "$RUNNER_TEMP/site" --project "${{ inputs.project }}" \
           --repo "${{ inputs.repo }}" --edit-url "${{ inputs.edit-url }}"
     - name: Push to gh-pages/<path> (retry, never replaces the whole branch)
       shell: bash

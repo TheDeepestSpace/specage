@@ -250,6 +250,34 @@ describe('API', () => {
     expect(stale.status).toBe(409);
     expect(((await stale.json()) as any).content).toContain('shoot.new');
   });
+  it('comments: create, reply, resolve via spec-branch commits; agent events merge', async () => {
+    const h = harness();
+    await h.signup(auth());
+    const post = (b: unknown) => h.req('POST', '/api/r/o/r/comments', b);
+    const c = await post({ op: 'create', node: 'shoot.cap', body: 'why 30?' });
+    expect(c.status).toBe(200);
+    expect(h.github.lastMessage).toBe('comments: create on shoot.cap');
+    expect(h.github.files['specages/r/spec:comments.yaml']).toContain('why 30?');
+    expect((await post({ op: 'reply', thread: 't-0001', body: 'ok' })).status).toBe(200);
+    expect((await post({ op: 'reply', thread: 'nope', body: 'ok' })).status).toBe(400);
+    expect((await post({ op: 'create', node: 'nope', body: 'x' })).status).toBe(400);
+    expect((await post({ op: 'create', node: 'shoot.cap', body: '' })).status).toBe(400);
+    expect((await post({ op: 'bogus' })).status).toBe(400);
+    h.github.files['specages/r/trail:thread-events.yaml'] =
+      '- {thread: t-0001, kind: resolve, author: agent, at: 2999-01-01T00:00:00Z}\n';
+    const st = (await (await h.req('GET', '/api/r/o/r/state')).json()) as any;
+    expect(st.threads[0].comments).toHaveLength(2);
+    expect(st.threads[0]).toMatchObject({ state: 'resolved', resolved_by: 'agent' });
+    // the spec itself is untouched
+    expect(h.github.head().spec).toBe(SPEC0);
+    const noCsrf = await h.req(
+      'POST',
+      '/api/r/o/r/comments',
+      { op: 'resolve', thread: 't-0001' },
+      { 'x-specage': '' },
+    );
+    expect(noCsrf.status).toBe(403);
+  });
   it('a save commits to the spec branch and leaves the cursor alone', async () => {
     const h = harness();
     await h.signup(auth());
