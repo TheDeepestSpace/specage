@@ -29,13 +29,14 @@ import {
   ViewPlugin,
   drawSelection,
   gutter,
+  hoverTooltip,
   keymap,
   lineNumbers,
   type DecorationSet,
   type ViewUpdate,
 } from '@codemirror/view';
 import { Vim, getCM, vim } from '@replit/codemirror-vim';
-import { diff as coreDiff, lint, parse, type State } from '@specage/core/browser';
+import { diff as coreDiff, lint, parse, type State, type Thread } from '@specage/core/browser';
 import { api, ApiError, loadMe } from './api.js';
 import { analyse, dotStatus, nodeAtLine, slug, type Analysis } from './analysis.js';
 import { conflictDialog } from './conflict.js';
@@ -43,6 +44,7 @@ import { h, store } from './dom.js';
 import grammarSrc from '../../../protocol/GRAMMAR.md?raw';
 import { renderMarkdown } from './markdown.js';
 import { renderPane } from './tracepane.js';
+import { openCount } from './threads.js';
 import { aggregateText } from './viewer.js';
 
 const VIM_KEY = 'editor-vim';
@@ -54,6 +56,7 @@ const emptyState = (): State => ({
   trace: { retired_ids: [], consumed_lineage: [], nodes: {} },
   work: { items: [] },
   questions: [],
+  thread_events: [],
 });
 
 export async function renderEditor(root: HTMLElement, repo: string) {
@@ -64,12 +67,19 @@ export async function renderEditor(root: HTMLElement, repo: string) {
   }
   let spec: { content: string; head_sha: string; path: string };
   let state: State = emptyState();
+  let threads: Thread[] = [];
   try {
     [spec, state] = await Promise.all([
       api('GET', `/api/r/${repo}/spec`),
-      api('GET', `/api/r/${repo}/state`).then(
-        (s: any) => ({ trace: s.trace, work: s.work, questions: s.questions }) as State,
-      ),
+      api('GET', `/api/r/${repo}/state`).then((s: any) => {
+        threads = s.threads ?? [];
+        return {
+          trace: s.trace,
+          work: s.work,
+          questions: s.questions,
+          thread_events: [],
+        } as State;
+      }),
     ]);
   } catch (e: any) {
     root.replaceChildren(h('p', { class: 'error' }, `Cannot open ${repo}: ${e.message}`));
@@ -113,6 +123,33 @@ export async function renderEditor(root: HTMLElement, repo: string) {
     initialSpacer: () => new Dot('unknown'),
   });
 
+  class Bubble extends GutterMarker {
+    constructor(readonly n: number) {
+      super();
+    }
+    eq(o: Bubble) {
+      return o.n === this.n;
+    }
+    toDOM() {
+      const s = document.createElement('span');
+      s.className = 'cmt-marker';
+      s.dataset.count = String(this.n);
+      s.title = `${this.n} open comment thread${this.n > 1 ? 's' : ''}`;
+      s.textContent = String(this.n);
+      return s;
+    }
+  }
+  const commentGutter = gutter({
+    class: 'cm-comment-gutter',
+    lineMarker(view, line) {
+      const a = view.state.field(analysisField);
+      const n = a.byLine.get(view.state.doc.lineAt(line.from).number);
+      const c = n && n.id ? openCount(threads, n.id) : 0;
+      return c ? new Bubble(c) : null;
+    },
+    lineMarkerChange: (u) => u.transactions.some((t) => t.effects.some((e) => e.is(setState))),
+  });
+
   const foldBySpec = foldService.of((st, from, to) => {
     const a = st.field(analysisField);
     const b = a.blocks.find((r) => r.open >= from && r.open <= to);
@@ -143,6 +180,7 @@ export async function renderEditor(root: HTMLElement, repo: string) {
       /(?<!\\)@[a-z][a-z0-9_.-]*(?:\s*<-\s*[a-z][a-z0-9_.-]*(?:\s*,\s*[a-z][a-z0-9_.-]*)*)?/g,
       'cm-spec-id',
     ],
+    [/(?<![\w$\\])\$[a-z][a-z0-9_-]*(?:\.[a-z][a-z0-9_-]*)*/g, 'cm-spec-ref'],
     [/(?<=(?:^|[;{}])\s*)(?:!\w+(?:[ \t]+\w+)?:|\?|>later:)/gm, 'cm-spec-marker'],
   ];
   const highlight = ViewPlugin.fromClass(
@@ -238,6 +276,54 @@ export async function renderEditor(root: HTMLElement, repo: string) {
     return { from: m ? m.from : ctx.pos, options: opts, validFor: /^@[a-z0-9_.-]*$/ };
   };
 
+  // `$id` references: autocomplete, hover preview, Ctrl/Cmd-click to jump
+  const refCompletion = (ctx: CompletionContext): CompletionResult | null => {
+    const m = ctx.matchBefore(/(?<![\w$\\])\$[a-z0-9_.-]*/);
+    if (!m) return null;
+    const a = ctx.state.field(analysisField);
+    const options = a.nodes
+      .filter((n) => !n.derived)
+      .map((n) => ({ label: `$${n.id}`, detail: n.text.slice(0, 50), type: 'variable' }));
+    return { from: m.from, options, validFor: /^\$[a-z0-9_.-]*$/ };
+  };
+  const refAt = (st: EditorState, pos: number): { id: string; from: number; to: number } | null => {
+    const line = st.doc.lineAt(pos);
+    for (const m of line.text.matchAll(
+      /(?<![\w$\\])\$([a-z][a-z0-9_-]*(?:\.[a-z][a-z0-9_-]*)*)/g,
+    )) {
+      const from = line.from + m.index!;
+      if (pos >= from && pos <= from + m[0].length)
+        return { id: m[1], from, to: from + m[0].length };
+    }
+    return null;
+  };
+  const refTooltip = hoverTooltip((view, pos) => {
+    const r = refAt(view.state, pos);
+    if (!r) return null;
+    const n = view.state.field(analysisField).nodes.find((x) => !x.derived && x.id === r.id);
+    return {
+      pos: r.from,
+      end: r.to,
+      above: true,
+      create: () => ({
+        dom: h('div', { class: 'cm-ref-tip' }, n ? `${n.id}: ${n.text}` : `unresolved: ${r.id}`),
+      }),
+    };
+  });
+  const refJump = EditorView.domEventHandlers({
+    mousedown(e, view) {
+      if (!(e.ctrlKey || e.metaKey)) return false;
+      const pos = view.posAtCoords({ x: e.clientX, y: e.clientY });
+      const r = pos === null ? null : refAt(view.state, pos);
+      const n = r && view.state.field(analysisField).nodes.find((x) => !x.derived && x.id === r.id);
+      if (!n) return false;
+      const target = view.state.doc.line(Math.min(Math.max(n.line, 1), view.state.doc.lines));
+      view.dispatch({ selection: { anchor: target.from }, scrollIntoView: true });
+      view.focus();
+      return true;
+    },
+  });
+
   // ---- layout ----
   const status = h('span', { id: 'status', class: 'status', role: 'status' });
   const saveBtn = h('button', { id: 'save', disabled: true }, 'Save') as HTMLButtonElement;
@@ -331,6 +417,12 @@ export async function renderEditor(root: HTMLElement, repo: string) {
       {
         repo,
         state,
+        threads,
+        onThreads(t) {
+          threads = t;
+          view.dispatch({ effects: setState.of(null) });
+          paneUpdate();
+        },
         goto(t) {
           const line = view.state.doc.line(Math.min(t.line, view.state.doc.lines));
           view.dispatch({ selection: { anchor: line.from }, scrollIntoView: true });
@@ -389,6 +481,7 @@ export async function renderEditor(root: HTMLElement, repo: string) {
         analysisField,
         lineNumbers(),
         statusGutter,
+        commentGutter,
         foldGutter(),
         foldBySpec,
         folding,
@@ -396,7 +489,12 @@ export async function renderEditor(root: HTMLElement, repo: string) {
         highlight,
         lintSource,
         lintGutter(),
-        autocompletion({ override: [idCompletion, markerCompletion], defaultKeymap: true }),
+        refTooltip,
+        refJump,
+        autocompletion({
+          override: [idCompletion, refCompletion, markerCompletion],
+          defaultKeymap: true,
+        }),
         EditorView.lineWrapping,
         // highest precedence: the completion keymap swallows Escape while its popup is open
         Prec.highest(

@@ -33,14 +33,18 @@ describe('parse', () => {
     expect(s.roots[1].line).toBe(5);
     expect(s.roots[0].endLine).toBe(4);
   });
-  it('continuation: CRLF, EOF, escaped backslash, missing ID', () => {
+  it('continuation: CRLF, EOF, escaped backslash, ID-less statement', () => {
     expect(parse('a \\\r\nb @x;').roots[0].text).toBe('a b');
     expect(parse('a @x; \\').diagnostics).toEqual([]);
     const e = parse('a \\\\\nb @x;');
     expect(e.roots[0].text).toBe('a \\ b');
     const m = parse('no \\\nid;');
-    expect(m.diagnostics.map((d) => d.code)).toEqual(['E002']);
-    expect(m.diagnostics[0].line).toBe(1);
+    expect(m.diagnostics).toEqual([]);
+    expect(m.roots[0].derived).toBe(true);
+    expect(m.roots[0].id).toBe(parse('no id;').roots[0].id);
+    expect(m.roots[0].text).toBe('no id');
+    expect(m.roots[0].line).toBe(1);
+    expect(m.roots[0].endLine).toBe(2);
   });
   it('hash is whitespace independent and case sensitive', () => {
     expect(parse('a   b\n c @x;').roots[0].hash).toBe(parse('a b c @x;').roots[0].hash);
@@ -237,5 +241,102 @@ describe('yaml hashes', () => {
       ),
     });
     expect(issues).toEqual([]);
+  });
+});
+
+describe('$id references', () => {
+  const src = 'frontend @fe; $fe is hosted on GH Pages @infra; costs $5 and $Home @x;';
+  it('extracts refs', () => {
+    const n = flatten(parse(src));
+    expect(n.find((x) => x.id === 'infra')!.refs).toEqual(['fe']);
+    expect(n.find((x) => x.id === 'x')!.refs).toEqual([]);
+  });
+  it('dedupes and handles dotted ids and trailing punctuation', () => {
+    const n = flatten(parse('see $a.b, $a.b and $c-d. @z;'));
+    expect(n[0].refs).toEqual(['a.b', 'c-d']);
+  });
+  it('W107 unresolved, W108 self', () => {
+    const codes = lint(parse('x $nope @a; y $b @b;')).map((d) => d.code);
+    expect(codes).toContain('W107');
+    expect(codes).toContain('W108');
+    expect(lint(parse(src)).map((d) => d.code)).not.toContain('W107');
+  });
+  it('resolves explicit ids only; refs to derived names warn', () => {
+    expect(lint(parse('a b c; see $s-12345678 @r;')).map((d) => d.code)).toContain('W107');
+  });
+  it('flags transitive dependents of changed statements', () => {
+    const o = 'a @a; uses $a @b; uses $b @c; other @d;';
+    const r = diff(parse(o), parse(o.replace('a @a', 'a2 @a')));
+    expect(r.stale_dependents).toEqual([
+      { id: 'b', because: ['a'] },
+      { id: 'c', because: ['a'] },
+    ]);
+    expect(diff(parse(o), parse(o)).stale_dependents).toEqual([]);
+  });
+});
+
+import { applyOp, mergeThreads, parseComments, stringifyComments } from '../src/index.js';
+describe('comment threads', () => {
+  const hashes = { 'a.b': '123456789012' };
+  const mk = () =>
+    applyOp(
+      [],
+      { op: 'create', node: 'a.b', node_hash: '', body: ' hi ' },
+      'me',
+      '2026-01-01T00:00:00Z',
+      hashes,
+    );
+  it('create/reply/resolve/reopen', () => {
+    let t = mk();
+    expect(t[0]).toMatchObject({ id: 't-0001', node_hash: '123456789012', state: 'open' });
+    expect(t[0].comments[0].body).toBe('hi');
+    t = applyOp(
+      t,
+      { op: 'reply', thread: 't-0001', body: 'yo' },
+      'o',
+      '2026-01-02T00:00:00Z',
+      hashes,
+    );
+    expect(t[0].comments.map((c) => c.id)).toEqual(['t-0001.1', 't-0001.2']);
+    t = applyOp(t, { op: 'resolve', thread: 't-0001' }, 'o', '2026-01-03T00:00:00Z', hashes);
+    expect(t[0]).toMatchObject({ state: 'resolved', resolved_by: 'o' });
+    t = applyOp(t, { op: 'reopen', thread: 't-0001' }, 'o', '2026-01-04T00:00:00Z', hashes);
+    expect(t[0].state).toBe('open');
+    expect(t[0].resolved_by).toBeUndefined();
+  });
+  it('rejects bad input', () => {
+    expect(() =>
+      applyOp([], { op: 'create', node: 'nope', node_hash: '', body: 'x' }, 'm', 't', hashes),
+    ).toThrow(/unknown node/);
+    expect(() =>
+      applyOp([], { op: 'create', node: 'a.b', node_hash: '', body: '  ' }, 'm', 't', hashes),
+    ).toThrow();
+    expect(() => applyOp([], { op: 'resolve', thread: 'x' }, 'm', 't', hashes)).toThrow(
+      /unknown thread/,
+    );
+  });
+  it('round-trips yaml (numeric-looking hash stays a string)', () => {
+    const t = applyOp([], { op: 'create', node: 'a.b', node_hash: '', body: 'x' }, 'm', 't', {
+      'a.b': '000000000001',
+    });
+    const back = parseComments(stringifyComments(t));
+    expect(back.issues).toEqual([]);
+    expect(back.threads).toEqual(t);
+    expect(parseComments('threads: 5').issues.length).toBeGreaterThan(0);
+  });
+  it('merges agent events from the trail branch', () => {
+    const m = mergeThreads(mk(), [
+      { thread: 't-0001', kind: 'resolve', author: 'agent', at: '2026-02-02T00:00:00Z' },
+      {
+        thread: 't-0001',
+        kind: 'reply',
+        author: 'agent',
+        at: '2026-02-01T00:00:00Z',
+        body: 'done',
+      },
+      { thread: 'gone', kind: 'resolve', author: 'agent', at: '2026-02-01T00:00:00Z' },
+    ]);
+    expect(m[0].comments.at(-1)).toMatchObject({ author: 'agent', body: 'done' });
+    expect(m[0]).toMatchObject({ state: 'resolved', resolved_by: 'agent' });
   });
 });

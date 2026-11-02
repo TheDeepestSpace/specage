@@ -110,4 +110,38 @@ export interface State {
   trace: Trace;
   work: Work;
   questions: Question[];
+  thread_events: ThreadEvent[];
 }
+
+// ---- node-anchored comment threads ----
+// Human-authored threads live in `comments.yaml` on the spec branch. Agents never write the spec
+// branch, so their replies/resolutions are events in `thread-events.yaml` on the trail branch;
+// `mergeThreads` folds both into the view shown to people.
+export const CommentSchema = z.object({
+  id: z.string(),
+  author: z.string(),
+  at: z.string(),
+  body: z.string(),
+});
+export const ThreadSchema = z.object({
+  id: z.string(),
+  node: z.string(),
+  node_hash: Hash,
+  state: z.enum(['open', 'resolved']),
+  comments: z.array(CommentSchema).min(1),
+  resolved_by: z.string().optional(),
+  resolved_at: z.string().optional(),
+});
+export const CommentsFileSchema = z.object({ threads: z.array(ThreadSchema).default([]) });
+export type Comment = z.infer<typeof CommentSchema>;
+export type Thread = z.infer<typeof ThreadSchema>;
+
+export const ThreadEventSchema = z.object({
+  thread: z.string(),
+  kind: z.enum(['reply', 'resolve', 'reopen']),
+  author: z.string(),
+  at: z.string(),
+  body: z.string().optional(),
+});
+export const ThreadEventsSchema = z.array(ThreadEventSchema);
+export type ThreadEvent = z.infer<typeof ThreadEventSchema>;

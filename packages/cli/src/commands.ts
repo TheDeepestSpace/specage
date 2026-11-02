@@ -8,6 +8,7 @@ import {
   hasErrors,
   lint,
   loadState,
+  parseComments,
   summarize,
   walk,
   type Diagnostic,
@@ -41,6 +42,7 @@ function nodeSummary(n: SpecNode): any {
     subtree_hash: n.subtreeHash,
     parent: n.parent,
     lineage: n.lineage,
+    refs: n.refs,
     line: n.line,
     children: n.children.map(nodeSummary),
   };
@@ -278,7 +280,13 @@ export function cmdRender(a: Args): number {
     const rs = listFiles(join(stateDir, 'dispatches')).filter((f) => f.endsWith('.md'));
     if (rs.length) report = readFileSync(join(stateDir, 'dispatches', rs[rs.length - 1]), 'utf8');
   }
+  const commentsFile = str(a, 'comments');
+  const cm = parseComments(
+    commentsFile && existsSync(commentsFile) ? readFileSync(commentsFile, 'utf8') : null,
+  );
+  if (cm.issues.length) throw new CliError(`invalid comments: ${cm.issues.join('; ')}`, 1);
   const data = buildData(spec, state, {
+    threads: cm.threads,
     project: str(a, 'project') ?? (specFile.split('/').pop() ?? '').replace(/\.specage$/, ''),
     report,
     editUrl: str(a, 'edit-url'),

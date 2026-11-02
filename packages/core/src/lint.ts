@@ -17,7 +17,6 @@ export function lint(spec: Spec, state?: LintState): Diagnostic[] {
   const nodes = flatten(spec);
   const seen = new Map<string, number>();
   const ids = new Set(nodes.filter((n) => !n.derived).map((n) => n.id));
-  const byId = new Map(nodes.map((n) => [n.id, n]));
   const retired = new Set(state?.retiredIds ?? []);
   const consumed = new Set(state?.consumedLineage ?? []);
 
@@ -29,6 +28,10 @@ export function lint(spec: Spec, state?: LintState): Diagnostic[] {
     }
     if (!n.derived && retired.has(n.id))
       push('E004', 'error', `ID "${n.id}" was retired and cannot be reused`, n);
+    for (const r of n.refs) {
+      if (!ids.has(r)) push('W107', 'warn', `unresolved reference "$${r}"`, n);
+      else if (r === n.id) push('W108', 'warn', `statement references itself ("$${r}")`, n);
+    }
     if (n.marker?.unknown) push('E005', 'error', `unknown marker "${n.marker.name}"`, n);
     for (const old of n.lineage) {
       if (ids.has(old)) push('E006', 'error', `"<- ${old}" names an ID that still exists`, n);
@@ -57,7 +60,6 @@ export function lint(spec: Spec, state?: LintState): Diagnostic[] {
     if (!n.derived && n.lineage.length && consumed.has(n.id))
       push('W105', 'warn', `"<-" clause on "${n.id}" survived the dispatch that consumed it`, n);
   }
-  void byId;
   return out.sort((a, b) => a.line - b.line || a.column - b.column);
 }
 

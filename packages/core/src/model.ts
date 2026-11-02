@@ -31,6 +31,8 @@ export interface SpecNode {
   parent: string | null;
   children: SpecNode[];
   lineage: string[];
+  /** IDs referenced as `$id` in the text (deduped, in order of appearance) */
+  refs: string[];
   line: number;
   column: number;
   endLine: number;

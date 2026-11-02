@@ -1,5 +1,6 @@
 import type { Spec, SpecNode } from './model.js';
-import type { State } from './schemas.js';
+import type { State, Thread } from './schemas.js';
+import { mergeThreads } from './comments.js';
 import { flatten } from './parse.js';
 
 export type NodeStatus =
@@ -36,6 +37,8 @@ export interface SpecData {
   trace: State['trace']['nodes'];
   work: State['work']['items'];
   questions: State['questions'];
+  /** node-anchored comment threads (human + agent), merged */
+  threads?: Thread[];
   report?: string;
   aggregate: Record<string, Record<string, number>>;
 }
@@ -59,6 +62,7 @@ export function buildData(
     repo?: string;
     specCommit?: string;
     now?: string;
+    threads?: Thread[];
   } = { project: '' },
 ): SpecData {
   const nodes: Record<string, NodeView> = {};
@@ -96,6 +100,7 @@ export function buildData(
     trace: state.trace.nodes,
     work: state.work.items,
     questions: state.questions,
+    ...(opts.threads?.length ? { threads: mergeThreads(opts.threads, state.thread_events) } : {}),
     report: opts.report,
     aggregate,
   };

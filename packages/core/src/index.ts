@@ -6,3 +6,4 @@ export * from './diff.js';
 export * from './schemas.js';
 export * from './state.js';
 export * from './data.js';
+export * from './comments.js';

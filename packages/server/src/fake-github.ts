@@ -69,9 +69,17 @@ export class FakeGitHub implements GitHub {
     this.created[b] = files;
     return sha(99);
   }
-  async commitSpec(_p: string, o: { content: string; parentSha: string; message: string }) {
+  async commitSpec(
+    _p: string,
+    o: { path?: string; content: string; parentSha: string; message: string },
+  ) {
     if (o.parentSha !== this.head().sha) throw new Conflict('moved');
     this.lastMessage = o.message;
+    if (o.path && o.path !== 'r.specage') {
+      this.files[`${specBranch('r')}:${o.path}`] = o.content;
+      this.commits.push({ sha: sha(this.commits.length), spec: this.head().spec });
+      return this.head().sha;
+    }
     this.commits.push({ sha: sha(this.commits.length), spec: o.content });
     return this.head().sha;
   }

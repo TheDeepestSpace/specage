@@ -250,6 +250,34 @@ describe('API', () => {
     expect(stale.status).toBe(409);
     expect(((await stale.json()) as any).content).toContain('shoot.new');
   });
+  it('comments: create, reply, resolve via spec-branch commits; agent events merge', async () => {
+    const h = harness();
+    await h.signup(auth());
+    const post = (b: unknown) => h.req('POST', '/api/r/o/r/comments', b);
+    const c = await post({ op: 'create', node: 'shoot.cap', body: 'why 30?' });
+    expect(c.status).toBe(200);
+    expect(h.github.lastMessage).toBe('comments: create on shoot.cap');
+    expect(h.github.files['specages/r/spec:comments.yaml']).toContain('why 30?');
+    expect((await post({ op: 'reply', thread: 't-0001', body: 'ok' })).status).toBe(200);
+    expect((await post({ op: 'reply', thread: 'nope', body: 'ok' })).status).toBe(400);
+    expect((await post({ op: 'create', node: 'nope', body: 'x' })).status).toBe(400);
+    expect((await post({ op: 'create', node: 'shoot.cap', body: '' })).status).toBe(400);
+    expect((await post({ op: 'bogus' })).status).toBe(400);
+    h.github.files['specages/r/trail:thread-events.yaml'] =
+      '- {thread: t-0001, kind: resolve, author: agent, at: 2999-01-01T00:00:00Z}\n';
+    const st = (await (await h.req('GET', '/api/r/o/r/state')).json()) as any;
+    expect(st.threads[0].comments).toHaveLength(2);
+    expect(st.threads[0]).toMatchObject({ state: 'resolved', resolved_by: 'agent' });
+    // the spec itself is untouched
+    expect(h.github.head().spec).toBe(SPEC0);
+    const noCsrf = await h.req(
+      'POST',
+      '/api/r/o/r/comments',
+      { op: 'resolve', thread: 't-0001' },
+      { 'x-specage': '' },
+    );
+    expect(noCsrf.status).toBe(403);
+  });
   it('a save commits to the spec branch and leaves the cursor alone', async () => {
     const h = harness();
     await h.signup(auth());
@@ -430,7 +458,6 @@ describe('GitHub access', () => {
       content: 'x',
       message: 'm',
       parentSha: 'a'.repeat(40),
-      author: { name: 'n', email: 'e' },
     });
     expect(log.length).toBeGreaterThan(8);
     for (const l of log)
@@ -440,6 +467,22 @@ describe('GitHub access', () => {
       ).toBe(true);
     const ref = log.find((l) => l.method === 'PATCH')!;
     expect(ref.body.force).toBe(false);
+  });
+  it('commit payloads carry no custom author/committer (attributed to the App bot)', async () => {
+    const { log, gh } = mock();
+    await gh.createOrphanBranch('new', 'spec', { 'a.txt': 'x' }, 'm');
+    await gh.commitSpec('r', {
+      path: 'a.specage',
+      content: 'x',
+      message: 'm',
+      parentSha: 'a'.repeat(40),
+    });
+    const commits = log.filter((l) => l.method === 'POST' && l.path.endsWith('/git/commits'));
+    expect(commits).toHaveLength(2);
+    for (const c of commits) {
+      expect(c.body).not.toHaveProperty('author');
+      expect(c.body).not.toHaveProperty('committer');
+    }
   });
   it('the request wrapper refuses anything off the allowlist', async () => {
     const { gh } = mock();

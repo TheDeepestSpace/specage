@@ -9,12 +9,12 @@ Run the CLI with `npx --yes github:TheDeepestSpace/specage#v0 <cmd>` (call it `s
 
 ## Session
 
-1. Clone the data repo named in the dispatch message: `git clone --branch specages/<project>/spec <data_repo>` then `git fetch origin specages/<project>/trail --tags`. Read `.specage/config.yaml`, `.specage/policy.yaml` and `GRAMMAR.md` from the spec branch. Check out `specages/<project>/trail` in a separate worktree. The project's code repo is `repo` in the config; issues and PRs are filed there.
+1. Clone the data repo named in the dispatch message: `git clone --branch specages/<project>/spec <data_repo>` then `git fetch origin specages/<project>/trail --tags`. Read `.specage/config.yaml`, `.specage/policy.yaml` and `GRAMMAR.md` from the spec branch. Check out the trail branch in a separate worktree with exactly `git worktree add -b specages/<project>/trail ../trail origin/specages/<project>/trail` (or, if the local branch exists, `git worktree add ../trail specages/<project>/trail`). Never create the trail checkout from a fresh `git init`, from the data repo's default branch, or with `--orphan`: it must descend from `origin/specages/<project>/trail`, and `git log` there must show the previous dispatch commits. Run `specage state commit` from that worktree, and if the push is not a fast-forward, `git pull --rebase` and retry; never force-push. The project's code repo is `repo` in the config; issues and PRs are filed there.
 2. **Cursor.** The cursor is the last spec commit already dispatched, stored in the data repo as the ref `refs/specage/dispatched/<project>` (not a branch). `<sha>` is the commit named in the dispatch message. Fetch it: `git fetch origin refs/specage/dispatched/<project>:refs/specage/dispatched/<project>` (if the ref does not exist, this is the first dispatch: diff from empty). Then: `specage diff --from <cursor> --to <sha> --spec-file <spec_file> --project <project> --json`. If `entries` is empty, advance the cursor (step 7) and stop.
 3. **Sync.** Scan PRs merged since the cursor for `Spec: <id>@<hash>` commit trailers or PR-body lines. Mark those claims `done`, set the work item to `merged`, add `pr` evidence to the trace.
 4. **Reconcile** every entry (ladder below).
 5. **Group** gaps into work items and file issues.
-6. Write `trace.yaml`, `work.yaml`, `questions.yaml`, `dispatches/<tag>.md` and any `outbox/` entries. Run `specage state validate`, then `specage state commit -m "dispatch <tag>"`. One commit per session.
+6. Write `trace.yaml`, `work.yaml`, `questions.yaml`, `thread-events.yaml` (if you replied to or resolved threads), `dispatches/<tag>.md` and any `outbox/` entries. Run `specage state validate`, then `specage state commit -m "dispatch <tag>"`. One commit per session.
 7. Post the report where the dispatch was started, then **advance the cursor** only after everything above succeeded: `git push origin <sha>:refs/specage/dispatched/<project>` (create it if missing; fast-forward only, never force). If the session fails earlier, leave the cursor so the next dispatch re-diffs the same changes. The specage server never moves the cursor.
 
 ## Reconcile ladder
@@ -46,7 +46,7 @@ Discovery is biased toward "implemented", so be strict:
 Chosen by `policy.yaml`, not by your judgment. You only classify.
 
 - **refresh**: update the hash.
-- **amend**: rewrite the issue's generated "Spec" section with the claimed nodes' current text; append an amendment note; post **one** PR review comment listing every moved node (old -> new text, "claim the new hash"); write an outbox `amend` entry for the PR (the-intern ignores its own comments).
+- **amend**: rewrite the issue's generated "Spec" section with the claimed nodes' current text; append an amendment note; post **one** PR review comment listing every moved node (old -> new text, "claim the new hash"); end that comment with `@the-intern-bot amend the PR per the comment above` so the-intern is triggered (it does not ignore its own comments, so you can comment directly).
 - **ask**: open a question naming the options: amend, stack, follow-up, supersede, split.
 
 ## Grouping and filing
@@ -54,15 +54,7 @@ Chosen by `policy.yaml`, not by your judgment. You only classify.
 - Group gap nodes into one issue when they share a block and a code area, or only make sense together.
 - Issue body has a generated **Spec** section: each claimed leaf's current text, `id@hash`, and the spec commit SHA. List any `!constraint` / `!impl` / `!invariant` leaves in the same subtree as binding context, plus existing evidence.
 - Claims are on leaves. Expand a block request to its leaves.
-- If `auto_implement: true`, write an `implement` outbox entry per new issue.
-
-Outbox entry (`outbox/<id>.json`, immutable, never edited or deleted):
-
-```json
-{"id":"o-2026-10-30T02-15Z-001","kind":"implement","target":251,"body":"Implement the claims on issue #251 per .specage/PROTOCOL.md section Implement.","created":"2026-10-30T02:15:11Z"}
-```
-
-`kind`: implement | amend | answer | continue. `target`: issue or PR number.
+- If `auto_implement: true`, comment `@the-intern-bot implement the claims on this issue per .specage/PROTOCOL.md section Implement.` on each new issue right after filing it. Do not write outbox entries: the-intern does not ignore its own comments, so the mention dispatches directly.
 
 ## Implement
 
@@ -71,6 +63,15 @@ For sessions working a filed issue:
 - Change only code and tests. Never write to the data repo's spec or trail branches.
 - Add a trailer `Spec: <id>@<hash>` per completed claim to the final commit. For a claim deliberately left unfinished, put `Spec-Release: <id>` in the PR body.
 - Open the PR with `Closes #N` and request review from `reviewer` in the config.
+
+## Comment threads
+
+Humans comment on spec nodes in the editor. Threads are in `comments.yaml` on the **spec** branch (read-only for you): `threads: [{id, node, node_hash, state: open|resolved, comments: [{id, author, at, body}], resolved_by?, resolved_at?}]`.
+
+- At dispatch, read `comments.yaml` and treat every `open` thread on a node in the diff (or one that asks you something) as input. A thread whose `node_hash` differs from the node's current hash is about older text; say so rather than guessing.
+- You never edit `comments.yaml`. To answer, append events to `thread-events.yaml` on the trail branch (append-only list): `{thread, kind: reply|resolve|reopen, author: the-intern, at: <ISO ts>, body?}` (`body` required for `reply`). Resolve only when the thread is settled by the spec or code as it stands; otherwise reply.
+- Unknown thread IDs are ignored. Keep replies short.
+- `questions.yaml` is unchanged and still the channel for reconcile/rename/split questions; threads are for free-form discussion.
 
 ## Report (`dispatches/<tag>.md`)
 

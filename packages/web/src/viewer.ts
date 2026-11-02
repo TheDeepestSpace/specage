@@ -1,6 +1,7 @@
 import type { NodeView, SpecData } from '@specage/core/browser';
 import { evidenceView } from './evidence.js';
 import { h, safeUrl, store } from './dom.js';
+import { byFilter, openCount, threadView, type ThreadFilter } from './threads.js';
 
 export const STATUS_LABEL: Record<string, string> = {
   unknown: 'untracked',
@@ -72,6 +73,19 @@ export function renderViewer(root: HTMLElement, data: SpecData) {
     'aria-label': 'Search',
   }) as HTMLInputElement;
   const list = h('div', { class: 'tree' });
+  const threads = data.threads ?? [];
+  let thFilter: ThreadFilter = 'open';
+  const thSel = h(
+    'select',
+    {
+      'aria-label': 'Thread filter',
+      class: 'th-filter',
+      onchange: (e: any) => ((thFilter = e.target.value), renderThreads()),
+    },
+    ...(['open', 'resolved', 'all'] as const).map((f) =>
+      h('option', { value: f }, `comments: ${f}`),
+    ),
+  ) as HTMLSelectElement;
   const editUrl =
     data.edit_url && repo
       ? safeUrl(`${data.edit_url.replace(/\/$/, '')}/r/${repo}`, new URL(data.edit_url).origin)
@@ -86,6 +100,7 @@ export function renderViewer(root: HTMLElement, data: SpecData) {
       `${Object.keys(data.nodes).length} nodes · generated ${data.generated.slice(0, 16).replace('T', ' ')}Z`,
     ),
     search,
+    threads.length ? thSel : null,
     editUrl ? h('a', { class: 'btn', href: editUrl }, 'Edit') : null,
   );
   root.replaceChildren(header);
@@ -134,6 +149,8 @@ export function renderViewer(root: HTMLElement, data: SpecData) {
           q.options ? h('ul', {}, ...q.options.map((o) => h('li', {}, o))) : null,
         ),
       );
+    const th = h('div', { class: 'threads-slot', 'data-node': n.id });
+    extra.append(th);
     for (const w of data.work.filter((w) => w.claims[n.id])) {
       const c = w.claims[n.id];
       extra.append(
@@ -145,6 +162,17 @@ export function renderViewer(root: HTMLElement, data: SpecData) {
       );
     }
     if (openQuestions.some((q) => q.node === n.id)) row.classList.add('has-question');
+    const oc = openCount(threads, n.id);
+    if (oc)
+      row.insertBefore(
+        h(
+          'span',
+          { class: 'cmt-marker', title: `${oc} open comment thread${oc > 1 ? 's' : ''}` },
+          String(oc),
+        ),
+        row.querySelector('.anchor'),
+      );
+    if (!threads.some((t) => t.node === n.id)) th.remove();
     if (extra.childElementCount) {
       const d = h('details', { class: 'leafdet' }, h('summary', {}), extra);
       d.querySelector('summary')!.replaceWith(h('summary', {}, row));
@@ -176,6 +204,17 @@ export function renderViewer(root: HTMLElement, data: SpecData) {
   const build = (n: NodeView, depth: number): HTMLElement =>
     n.type === 'block' ? block(n, depth) : leafRow(n);
   for (const id of data.roots) list.append(build(data.nodes[id], 0));
+
+  function renderThreads() {
+    for (const slot of list.querySelectorAll<HTMLElement>('.threads-slot'))
+      slot.replaceChildren(
+        ...byFilter(
+          threads.filter((t) => t.node === slot.dataset.node),
+          thFilter,
+        ).map((t) => threadView(t)),
+      );
+  }
+  renderThreads();
 
   function reveal() {
     const id = decodeURIComponent(location.hash.slice(1));
