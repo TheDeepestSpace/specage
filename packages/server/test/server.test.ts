@@ -430,7 +430,6 @@ describe('GitHub access', () => {
       content: 'x',
       message: 'm',
       parentSha: 'a'.repeat(40),
-      author: { name: 'n', email: 'e' },
     });
     expect(log.length).toBeGreaterThan(8);
     for (const l of log)
@@ -440,6 +439,22 @@ describe('GitHub access', () => {
       ).toBe(true);
     const ref = log.find((l) => l.method === 'PATCH')!;
     expect(ref.body.force).toBe(false);
+  });
+  it('commit payloads carry no custom author/committer (attributed to the App bot)', async () => {
+    const { log, gh } = mock();
+    await gh.createOrphanBranch('new', 'spec', { 'a.txt': 'x' }, 'm');
+    await gh.commitSpec('r', {
+      path: 'a.specage',
+      content: 'x',
+      message: 'm',
+      parentSha: 'a'.repeat(40),
+    });
+    const commits = log.filter((l) => l.method === 'POST' && l.path.endsWith('/git/commits'));
+    expect(commits).toHaveLength(2);
+    for (const c of commits) {
+      expect(c.body).not.toHaveProperty('author');
+      expect(c.body).not.toHaveProperty('committer');
+    }
   });
   it('the request wrapper refuses anything off the allowlist', async () => {
     const { gh } = mock();

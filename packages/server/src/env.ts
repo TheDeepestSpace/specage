@@ -13,8 +13,6 @@ export interface Env {
   appId?: string;
   appPrivateKey?: string;
   devGithubToken?: string;
-  authorName: string;
-  authorEmail: string;
   /** owner/repo of the shared data repo holding the specages/<project>/{spec,trail} branches */
   dataRepo: string;
   /** the-intern repo whose dispatcher workflow runs the agent (written into project config) */
@@ -60,8 +58,6 @@ export function loadEnv(e: NodeJS.ProcessEnv = process.env): Env {
     appId: dev ? e.GITHUB_APP_ID : need('GITHUB_APP_ID'),
     appPrivateKey: dev ? e.GITHUB_APP_PRIVATE_KEY : need('GITHUB_APP_PRIVATE_KEY'),
     devGithubToken: e.DEV_GITHUB_TOKEN,
-    authorName: e.AUTHOR_NAME ?? 'specage',
-    authorEmail: e.AUTHOR_EMAIL ?? 'specage@users.noreply.github.com',
     dataRepo,
     internRepo: e.INTERN_REPO ?? 'TheDeepestSpace/the-intern',
     dbPath: e.DB_PATH ?? (dev ? resolve('specage-dev.db') : '/data/specage.db'),
