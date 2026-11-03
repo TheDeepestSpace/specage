@@ -46,7 +46,7 @@ Discovery is biased toward "implemented", so be strict:
 Chosen by `policy.yaml`, not by your judgment. You only classify.
 
 - **refresh**: update the hash.
-- **amend**: rewrite the issue's generated "Spec" section with the claimed nodes' current text; append an amendment note; post **one** PR review comment listing every moved node (old -> new text, "claim the new hash"); end that comment with `@the-intern-bot amend the PR per the comment above` so the-intern is triggered (it does not ignore its own comments, so you can comment directly).
+- **amend**: rewrite the issue's generated "Spec" section with the claimed nodes' current text; append an amendment note; post **one** PR review comment listing every moved node (old -> new text, "claim the new hash"); end that comment with `@the-intern-bot specage=true amend the PR per the comment above` so the-intern is triggered (it does not ignore its own comments, so you can comment directly).
 - **ask**: open a question naming the options: amend, stack, follow-up, supersede, split.
 
 ## Grouping and filing
@@ -54,7 +54,7 @@ Chosen by `policy.yaml`, not by your judgment. You only classify.
 - Group gap nodes into one issue when they share a block and a code area, or only make sense together.
 - Issue body has a generated **Spec** section: each claimed leaf's current text, `id@hash`, and the spec commit SHA. List any `!constraint` / `!impl` / `!invariant` leaves in the same subtree as binding context, plus existing evidence.
 - Claims are on leaves. Expand a block request to its leaves.
-- If `auto_implement: true`, comment `@the-intern-bot implement the claims on this issue per .specage/PROTOCOL.md section Implement.` on each new issue right after filing it. Do not write outbox entries: the-intern does not ignore its own comments, so the mention dispatches directly.
+- If `auto_implement: true`, comment `@the-intern-bot specage=true implement the claims on this issue per .specage/PROTOCOL.md section Implement.` on each new issue right after filing it. The `specage=true` parameter is required: it grants the agent read access to specage-data. Do not write outbox entries: the-intern does not ignore its own comments, so the mention dispatches directly.
 
 ## Implement
 
@@ -72,7 +72,7 @@ For sessions dispatched to review an implement PR (the dispatch message names th
 
 - Check the PR against the spec, not just the code: every claimed statement (`Spec: <id>@<hash>` trailers and the issue's generated Spec section) must be implemented at the claimed hash and covered by tests; `Spec-Release: <id>` lines excuse a claim only when the PR body says why; the trace and work items on the trail branch must stay consistent with what the PR actually does.
 - Submit the verdict with `gh pr review --approve` or `--request-changes`, with a short body listing findings. GitHub rejects approving or requesting changes on the bot's own PR; fall back to `gh pr review --comment` whose first line is `APPROVE` or `CHANGES REQUESTED`.
-- When you request changes, also post a PR comment that starts with `@the-intern-bot` followed by the findings to fix: that dispatches the implement agent, which re-initiates review after pushing (see Implement).
+- When you request changes, also post a PR comment that starts with `@the-intern-bot specage=true` followed by the findings to fix: that dispatches the implement agent, which re-initiates review after pushing (see Implement).
 - Never push to the PR branch, never merge, and never push to the review branch yourself. The human owner stays the final merger: on APPROVE, stop; the owner merges by hand.
 - Ignore your own earlier reviews as evidence that anything works.
 
