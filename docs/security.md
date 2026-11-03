@@ -42,6 +42,13 @@ to the browser (tested). Data-repo rulesets (created by hand; HUMAN-CONFIRM) can
 
 `DEV_GITHUB_TOKEN` is refused unless `NODE_ENV=development`.
 
+## Review dispatch
+
+There is no agent-facing HTTP route. An implement agent asks for a review by pushing an empty commit
+(`review <owner/repo>#<n>`) to `specages/<project>/review` in the data repo. The push is the security boundary: it needs
+write access to the data repo, and the-intern worker verifies the webhook signature, the repo allowlist and the pusher before
+dispatching a review session. The specage server is not involved and holds no extra token.
+
 ## Untrusted content
 
 Spec text and everything on a trail branch is untrusted. The SPA builds DOM with `textContent` only (no `innerHTML`, no markdown),
