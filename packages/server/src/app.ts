@@ -52,6 +52,8 @@ const STEPUP_MS = 5 * 60_000;
 const WINDOW_MS = 5 * 60_000;
 const LINK_MS = 10 * 60_000;
 const WRITES_PER_HOUR = 60;
+const REVIEWS_PER_PR_HOUR = 2;
+const REVIEWS_PER_REPO_HOUR = 10;
 
 interface Session {
   cid: string;
@@ -138,6 +140,9 @@ export function createApp({ env, db, github, now = Date.now }: Deps) {
   app.use('*', async (c, next) => {
     const m = c.req.method;
     if (m === 'GET' || m === 'HEAD') return next();
+    // /agent/* is the machine path for dispatched agents: no browser, no session, so Origin and
+    // custom headers prove nothing. Its handlers validate and rate limit instead.
+    if (new URL(c.req.url).pathname.startsWith('/agent/')) return next();
     if (c.req.header('origin') !== env.publicUrl) return c.json({ error: 'bad origin' }, 403);
     if (c.req.header('x-specage') !== '1')
       return c.json({ error: 'missing X-Specage header' }, 403);
@@ -649,6 +654,57 @@ export function createApp({ env, db, github, now = Date.now }: Deps) {
     } catch (e) {
       db.audit('init', String(body.repo ?? ''), 'fail');
       return initError(c, e);
+    }
+  });
+
+  // ---- agent endpoint (no session: dispatched agents hold no passkey) ----
+  // An implement agent calls this after opening or updating a PR (PROTOCOL.md, Implement) and the
+  // server files a custom_prompt repository_dispatch on the-intern that runs the review agent.
+  // Unauthenticated by design; the only effect is a review of an existing PR on a specage-enabled
+  // repo, bounded by the per-PR and per-repo rate limits below and audited.
+  const reviewWrites = new Map<string, number[]>();
+  const reviewLimited = (key: string, cap: number): boolean => {
+    const recent = (reviewWrites.get(key) ?? []).filter((t) => t > now() - 3600_000);
+    if (recent.length >= cap) return true;
+    recent.push(now());
+    reviewWrites.set(key, recent);
+    return false;
+  };
+  app.post('/agent/initiate-review', async (c) => {
+    const body = await c.req.json().catch(() => null);
+    const repo = typeof body?.repo === 'string' ? body.repo : '';
+    const pr = Number.isInteger(body?.pr) && body.pr > 0 ? (body.pr as number) : 0;
+    if (!/^[\w.-]+\/[\w.-]+$/.test(repo) || !pr)
+      return c.json({ error: 'body must be {repo: "owner/repo", pr: <number>}' }, 400);
+    const project = repo.split('/')[1];
+    try {
+      await github.assertInstalled();
+      const cfgText = await github.getFile('.specage/config.yaml', specBranch(project));
+      const cfg = cfgText === null ? null : ConfigSchema.safeParse(YAML.parse(cfgText));
+      if (!cfg?.success || (cfg.data.repo && cfg.data.repo !== repo))
+        return c.json({ error: 'repo is not specage-enabled' }, 404);
+      if (
+        reviewLimited(`${repo}#${pr}`, REVIEWS_PER_PR_HOUR) ||
+        reviewLimited(repo, REVIEWS_PER_REPO_HOUR)
+      ) {
+        db.audit('initiate-review', repo, `pr#${pr}: rate limited`);
+        return c.json({ error: 'rate limit' }, 429);
+      }
+      const dataRepo = cfg.data.data_repo ?? env.dataRepo;
+      await github.createDispatch(cfg.data.intern.repo, 'custom_prompt', {
+        target_repo: repo,
+        pr_number: String(pr),
+        text:
+          `specage=true backend=${cfg.data.intern.backend} Review PR #${pr} in ${repo} per the Review section of ` +
+          `.specage/PROTOCOL.md. The spec and trail live in ${dataRepo} on branches specages/${project}/{spec,trail}.`,
+      });
+      db.audit('initiate-review', repo, `pr#${pr}: dispatched`);
+      return c.json({ ok: true }, 202);
+    } catch (e) {
+      if (e instanceof NotFound)
+        return c.json({ error: 'specage App is not installed on the data repo' }, 404);
+      if (e instanceof PermissionError) return c.json({ error: e.message }, 403);
+      throw e;
     }
   });
 

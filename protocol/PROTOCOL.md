@@ -62,7 +62,20 @@ For sessions working a filed issue:
 
 - Change only code and tests. Never write to the data repo's spec or trail branches.
 - Add a trailer `Spec: <id>@<hash>` per completed claim to the final commit. For a claim deliberately left unfinished, put `Spec-Release: <id>` in the PR body.
-- Open the PR with `Closes #N` and request review from `reviewer` in the config.
+- Open the PR with `Closes #N`. Do not request review from the owner or `reviewer`.
+- After opening the PR — and again after pushing changes a review asked for — initiate a specage review:
+  `curl -sS -X POST <ui.url>/agent/initiate-review -H 'content-type: application/json' -d '{"repo": "<owner/repo>", "pr": <number>}'`
+  where `<ui.url>` is `ui.url` and `<owner/repo>` is `repo` in `.specage/config.yaml`. If the config has no `ui.url` or the call fails, fall back to requesting review from `reviewer` in the config and say so in your final comment.
+
+## Review
+
+For sessions dispatched to review an implement PR (the dispatch message names the PR):
+
+- Check the PR against the spec, not just the code: every claimed statement (`Spec: <id>@<hash>` trailers and the issue's generated Spec section) must be implemented at the claimed hash and covered by tests; `Spec-Release: <id>` lines excuse a claim only when the PR body says why; the trace and work items on the trail branch must stay consistent with what the PR actually does.
+- Submit the verdict with `gh pr review --approve` or `--request-changes`, with a short body listing findings. GitHub rejects approving or requesting changes on the bot's own PR; fall back to `gh pr review --comment` whose first line is `APPROVE` or `CHANGES REQUESTED`.
+- When you request changes, also post a PR comment that starts with `@the-intern-bot` followed by the findings to fix: that dispatches the implement agent, which re-initiates review after pushing (see Implement).
+- Never push to the PR branch, never merge, and never call `/agent/initiate-review` yourself. The human owner stays the final merger: on APPROVE, stop; the owner merges by hand.
+- Ignore your own earlier reviews as evidence that anything works.
 
 ## Comment threads
 

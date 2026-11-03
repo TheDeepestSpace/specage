@@ -84,5 +84,9 @@ export class FakeGitHub implements GitHub {
     return this.head().sha;
   }
   lastMessage = '';
+  dispatches: { repo: string; event_type: string; client_payload: Record<string, unknown> }[] = [];
+  async createDispatch(repo: string, event_type: string, client_payload: Record<string, unknown>) {
+    this.dispatches.push({ repo, event_type, client_payload });
+  }
 }
 const sha = (n: number) => n.toString(16).padStart(40, '0');
