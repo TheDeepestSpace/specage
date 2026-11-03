@@ -63,9 +63,8 @@ For sessions working a filed issue:
 - Change only code and tests. Never write to the data repo's spec or trail branches.
 - Add a trailer `Spec: <id>@<hash>` per completed claim to the final commit. For a claim deliberately left unfinished, put `Spec-Release: <id>` in the PR body.
 - Open the PR with `Closes #N`. Do not request review from the owner or `reviewer`.
-- After opening the PR — and again after pushing changes a review asked for — initiate a specage review:
-  `curl -sS -X POST <ui.url>/agent/initiate-review -H 'content-type: application/json' -d '{"repo": "<owner/repo>", "pr": <number>}'`
-  where `<ui.url>` is `ui.url` and `<owner/repo>` is `repo` in `.specage/config.yaml`. If the config has no `ui.url` or the call fails, fall back to requesting review from `reviewer` in the config and say so in your final comment.
+- After opening the PR — and again after pushing changes a review asked for — initiate a specage review by pushing an empty commit to the data repo's review branch (a push is the authenticated trigger; there is no HTTP endpoint). `<data_repo>` and `<project>` come from `.specage/config.yaml`; `<owner/repo>` is its `repo`:
+  `git clone --no-checkout <data_repo> review && cd review && git fetch origin specages/<project>/review specages/<project>/trail`, then check out `specages/<project>/review` if it exists, else create it from `origin/specages/<project>/trail`: `git switch -C specages/<project>/review origin/specages/<project>/review` (or `... origin/specages/<project>/trail`). Then `git commit --allow-empty -m "review <owner/repo>#<number>"` and `git push origin specages/<project>/review` (fast-forward only, never force; on rejection fetch and retry). The commit message must be exactly that form: it names the PR to review. If the push fails, fall back to requesting review from `reviewer` in the config and say so in your final comment.
 
 ## Review
 
@@ -74,7 +73,7 @@ For sessions dispatched to review an implement PR (the dispatch message names th
 - Check the PR against the spec, not just the code: every claimed statement (`Spec: <id>@<hash>` trailers and the issue's generated Spec section) must be implemented at the claimed hash and covered by tests; `Spec-Release: <id>` lines excuse a claim only when the PR body says why; the trace and work items on the trail branch must stay consistent with what the PR actually does.
 - Submit the verdict with `gh pr review --approve` or `--request-changes`, with a short body listing findings. GitHub rejects approving or requesting changes on the bot's own PR; fall back to `gh pr review --comment` whose first line is `APPROVE` or `CHANGES REQUESTED`.
 - When you request changes, also post a PR comment that starts with `@the-intern-bot` followed by the findings to fix: that dispatches the implement agent, which re-initiates review after pushing (see Implement).
-- Never push to the PR branch, never merge, and never call `/agent/initiate-review` yourself. The human owner stays the final merger: on APPROVE, stop; the owner merges by hand.
+- Never push to the PR branch, never merge, and never push to the review branch yourself. The human owner stays the final merger: on APPROVE, stop; the owner merges by hand.
 - Ignore your own earlier reviews as evidence that anything works.
 
 ## Comment threads

@@ -58,12 +58,6 @@ export interface GitHub {
       parentSha: string;
     },
   ): Promise<string>;
-  /** files a repository_dispatch on the given repo (the-intern); throws PermissionError if the App can't reach it */
-  createDispatch(
-    repo: string,
-    eventType: string,
-    clientPayload: Record<string, unknown>,
-  ): Promise<void>;
 }
 
 export type Fetch = (url: string, init?: RequestInit) => Promise<Response>;
@@ -108,7 +102,6 @@ export const ALLOWED: { method: string; auth: 'jwt' | 'install'; re: RegExp }[] 
   },
   { method: 'POST', auth: 'install', re: new RegExp(`^/repos/${SEG}/${SEG}/git/refs$`) },
   { method: 'PUT', auth: 'install', re: new RegExp(`^/repos/${SEG}/${SEG}/contents/README\\.md$`) },
-  { method: 'POST', auth: 'install', re: new RegExp(`^/repos/${SEG}/${SEG}/dispatches$`) },
 ];
 
 export class RealGitHub implements GitHub {
@@ -221,49 +214,6 @@ export class RealGitHub implements GitHub {
 
   private async wideReq(method: string, path: string, body?: unknown) {
     return this.req(method, path, { kind: 'install', token: await this.wideToken() }, body);
-  }
-
-  /**
-   * Token for repository_dispatch on the-intern: contents write limited to that one repo, resolved
-   * via its own installation lookup (it need not share the data repo's installation).
-   */
-  private async dispatchToken(repo: string): Promise<string> {
-    if (this.o.devToken) return this.o.devToken;
-    const key = `dispatch:${repo}`;
-    const c = this.tokens.get(key);
-    if (c && c.exp - 5 * 60_000 > this.now()) return c.token;
-    const lookup = await this.req('GET', `/repos/${repo}/installation`, { kind: 'jwt' });
-    if (lookup.status === 404)
-      throw new PermissionError(
-        `specage App is not installed on ${repo}: add it to the installation`,
-      );
-    if (!lookup.ok) throw new Error(`GitHub ${lookup.status}`);
-    const id = ((await lookup.json()) as any).id;
-    const r = await this.req(
-      'POST',
-      `/app/installations/${id}/access_tokens`,
-      { kind: 'jwt' },
-      { repositories: [repo.split('/')[1]], permissions: { contents: 'write' } },
-    );
-    if (r.status === 422 || r.status === 403)
-      throw new PermissionError(
-        `specage App needs "Contents: read & write" on ${repo} to file dispatches`,
-      );
-    if (!r.ok) throw new Error(`GitHub token mint failed: ${r.status}`);
-    const j = (await r.json()) as any;
-    this.tokens.set(key, { token: j.token, exp: Date.parse(j.expires_at) });
-    return j.token;
-  }
-
-  async createDispatch(repo: string, eventType: string, clientPayload: Record<string, unknown>) {
-    const token = await this.dispatchToken(repo);
-    const r = await this.req(
-      'POST',
-      `/repos/${repo}/dispatches`,
-      { kind: 'install', token },
-      { event_type: eventType, client_payload: clientPayload },
-    );
-    if (!r.ok) throw new Error(`GitHub dispatch failed: ${r.status}`);
   }
 
   private async repoReq(method: string, sub: string, body?: unknown) {

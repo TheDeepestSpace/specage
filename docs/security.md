@@ -32,23 +32,22 @@ Choose the final hostname before signing up: passkeys are bound to the RP ID.
 
 ## GitHub access
 
-The server writes to one repository only: the data repo (`SPECAGE_DATA_REPO`) that holds every project's
-`specages/<project>/{spec,trail}` branches (plus `repository_dispatch` events on `INTERN_REPO`, below). It reaches GitHub only through `RealGitHub`, whose request wrapper refuses anything
+The server talks to one repository only: the data repo (`SPECAGE_DATA_REPO`) that holds every project's
+`specages/<project>/{spec,trail}` branches. It reaches GitHub only through `RealGitHub`, whose request wrapper refuses anything
 not in `ALLOWED` (`packages/server/src/github.ts`): installation lookup, token minting, reads of file contents/refs/commits,
 blob/tree/commit creation, a non-force update of `refs/heads/specages/*/spec`, and creation of refs (project branches), and labels on project repos. The server only reads the `specage/dispatched/<project>` cursor; the agent advances it.
-Data-repo installation tokens are limited to the data repo and `contents`; a second token (Issues write, Metadata read; no contents) is used for project repos (list repos, labels); a third (`contents` write, limited to the one repo named in the project config's `intern.repo`) files review dispatches. All are cached in memory until 5 minutes before expiry, and never sent
+Data-repo installation tokens are limited to the data repo and `contents`; a second token (Issues write, Metadata read; no contents) is used for project repos (list repos, labels). Both are cached in memory until 5 minutes before expiry, and never sent
 to the browser (tested). Data-repo rulesets (created by hand; HUMAN-CONFIRM) can further limit the App to the
 `specages/*/spec` branches.
 
 `DEV_GITHUB_TOKEN` is refused unless `NODE_ENV=development`.
 
-## Agent endpoint
+## Review dispatch
 
-`POST /agent/initiate-review` `{repo, pr}` is the one unauthenticated machine route: implement agents hold no passkey, and giving
-them a bearer secret would put it in dispatched-session environments. It is exempt from the CSRF checks, acts only for
-specage-enabled repos (config verified on the spec branch), is rate limited (2/hour per PR, 10/hour per repo, in memory) and
-audited. Its only effect is a `custom_prompt` repository_dispatch on the intern repo asking it to review the named PR — no data
-is returned and nothing is written to the data repo. Anyone who finds the URL can at worst burn capped review runs.
+There is no agent-facing HTTP route. An implement agent asks for a review by pushing an empty commit
+(`review <owner/repo>#<n>`) to `specages/<project>/review` in the data repo. The push is the security boundary: it needs
+write access to the data repo, and the-intern worker verifies the webhook signature, the repo allowlist and the pusher before
+dispatching a review session. The specage server is not involved and holds no extra token.
 
 ## Untrusted content
 
