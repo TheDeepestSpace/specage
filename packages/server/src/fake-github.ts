@@ -50,6 +50,13 @@ export class FakeGitHub implements GitHub {
     if (ref === `heads/${specBranch('r')}`) return this.head().sha;
     return this.created[ref.replace(/^heads\//, '')] ? sha(99) : null;
   }
+  dispatches: { intern: string; workflow: string; dispatch: Record<string, unknown> }[] = [];
+  /** set to make dispatchAgent fail */
+  dispatchError: Error | null = null;
+  async dispatchAgent(intern: string, workflow: string, dispatch: Record<string, unknown>) {
+    if (this.dispatchError) throw this.dispatchError;
+    this.dispatches.push({ intern, workflow, dispatch });
+  }
   async getCursor() {
     return this.cursor;
   }

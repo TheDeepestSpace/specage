@@ -139,6 +139,7 @@ export function testEnv(ownerPubkey: string): Env {
     ownerPubkey,
     dataRepo: 'o/specage-data',
     internRepo: 'o/the-intern',
+    specageRepo: 'o/specage',
     dbPath: ':memory:',
     webDist: '/nonexistent',
   };

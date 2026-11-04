@@ -9,7 +9,7 @@ export interface DispatchContext {
   issue?: number;
   /** `id@hash` claims the run must satisfy */
   spec_ids: string[];
-  kind: DispatchKind;
+  kind: DispatchKind | 'planner';
   attempt: number;
   max_attempts: number;
 }

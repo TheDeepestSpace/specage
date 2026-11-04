@@ -10,7 +10,7 @@ Prompts for the-intern `dispatch_agent` runs, referenced as
 | `implement.md` | implement a filed issue (opens a PR) |
 | `amend.md` | amend an open PR (`pr=N`): spec moved, review findings, verifier correction |
 | `review.md` | review an implement PR against the spec |
-| `discovery.md` | the planner session for a spec commit (reconcile ladder, filing). Not dispatched through `dispatch_agent` yet: it has no issue/PR to target, so it still runs via the-intern's commit trigger (`prompt_file: protocol/PROTOCOL.md`) |
+| `discovery.md` | the planner session for a spec commit (reconcile ladder, filing). dispatched by the specage server on spec save through `dispatch_agent` with no issue/PR target; context carries `before`/`after` (the cursor and the new spec commit) |
 
 specage verifies the result itself (`specage callback`): the agent's claim of
 success is never trusted.

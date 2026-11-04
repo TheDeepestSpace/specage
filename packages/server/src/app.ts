@@ -22,6 +22,7 @@ import {
   applyOp,
   CommentError,
   flatten,
+  buildPlannerDispatch,
   parseYaml,
 } from '@specage/core';
 import YAML from 'yaml';
@@ -527,6 +528,36 @@ export function createApp({ env, db, github, now = Date.now }: Deps) {
     return c.json({ error: 'conflict, try again' }, 409);
   });
 
+  // Planner session for a saved spec commit: one dispatch_agent per successful save (a commit that lost
+  // the race or failed lint never gets here). Failure is reported, not fatal: the spec is already committed
+  // and the cursor stays put, so the next save's range (cursor..head) covers it.
+  const firePlanner = async (
+    cfg: ReturnType<typeof ConfigSchema.parse>,
+    owner: string,
+    project: string,
+    after: string,
+  ): Promise<'dispatched' | 'failed'> => {
+    try {
+      const dispatch = buildPlannerDispatch({
+        repo: cfg.repo ?? `${owner}/${project}`,
+        data_repo: cfg.data_repo ?? env.dataRepo,
+        specage_repo: env.specageRepo,
+        prompt_ref: 'main',
+        project,
+        before: await github.getCursor(project),
+        after,
+        backend: cfg.intern.backend,
+      });
+      await github.dispatchAgent(cfg.intern.repo, cfg.intern.workflow, dispatch);
+      db.audit('planner', `${owner}/${project}`, 'ok');
+      return 'dispatched';
+    } catch (e) {
+      console.error(`planner dispatch ${owner}/${project}: ${(e as Error).message}`);
+      db.audit('planner', `${owner}/${project}`, 'failed');
+      return 'failed';
+    }
+  };
+
   app.put('/api/r/:owner/:repo/spec', async (c) => {
     const { owner, repo } = c.req.param();
     const limited = rateLimit(c);
@@ -568,7 +599,8 @@ export function createApp({ env, db, github, now = Date.now }: Deps) {
         parentSha: head!,
       });
       db.audit('save', `${owner}/${repo}`, 'ok');
-      return c.json({ head_sha: sha, diagnostics: diags });
+      const planner = await firePlanner(cfgOf(c), owner, repo, sha);
+      return c.json({ head_sha: sha, diagnostics: diags, planner });
     } catch (e) {
       if (e instanceof Conflict) {
         db.audit('save', `${owner}/${repo}`, '409');

@@ -48,6 +48,15 @@ export interface GitHub {
     files: Record<string, string>,
     message: string,
   ): Promise<string>;
+  /**
+   * Fire the-intern's dispatcher workflow with one `dispatch` JSON (generic dispatch_agent). Needs
+   * Actions: write on the intern repo. Throws PermissionError when the App lacks it.
+   */
+  dispatchAgent(
+    internRepo: string,
+    workflow: string,
+    dispatch: Record<string, unknown>,
+  ): Promise<void>;
   /** non-force commit onto the project's spec branch; throws Conflict if the branch moved */
   commitSpec(
     project: string,
@@ -101,6 +110,11 @@ export const ALLOWED: { method: string; auth: 'jwt' | 'install'; re: RegExp }[] 
     re: new RegExp(`^/repos/${SEG}/${SEG}/git/refs/heads/specages/${SEG}/spec$`),
   },
   { method: 'POST', auth: 'install', re: new RegExp(`^/repos/${SEG}/${SEG}/git/refs$`) },
+  {
+    method: 'POST',
+    auth: 'install',
+    re: new RegExp(`^/repos/${SEG}/${SEG}/actions/workflows/[\\w.-]+\\.ya?ml/dispatches$`),
+  },
   { method: 'PUT', auth: 'install', re: new RegExp(`^/repos/${SEG}/${SEG}/contents/README\\.md$`) },
 ];
 
@@ -210,6 +224,41 @@ export class RealGitHub implements GitHub {
     const j = (await r.json()) as any;
     this.tokens.set('wide', { token: j.token, exp: Date.parse(j.expires_at) });
     return j.token;
+  }
+
+  /** Actions write on the intern repo only (dispatches the-intern's workflow). */
+  private async internToken(internRepo: string): Promise<string> {
+    if (this.o.devToken) return this.o.devToken;
+    const key = `intern:${internRepo}`;
+    const c = this.tokens.get(key);
+    if (c && c.exp - 5 * 60_000 > this.now()) return c.token;
+    const id = await this.installationId();
+    const r = await this.req(
+      'POST',
+      `/app/installations/${id}/access_tokens`,
+      { kind: 'jwt' },
+      { repositories: [internRepo.split('/')[1]], permissions: { actions: 'write' } },
+    );
+    if (r.status === 422 || r.status === 403)
+      throw new PermissionError(
+        `specage App needs "Actions: read & write" on ${internRepo} to dispatch the planner`,
+      );
+    if (!r.ok) throw new Error(`GitHub token mint failed: ${r.status}`);
+    const j = (await r.json()) as any;
+    this.tokens.set(key, { token: j.token, exp: Date.parse(j.expires_at) });
+    return j.token;
+  }
+
+  async dispatchAgent(internRepo: string, workflow: string, dispatch: Record<string, unknown>) {
+    const r = await this.req(
+      'POST',
+      `/repos/${internRepo}/actions/workflows/${workflow}/dispatches`,
+      { kind: 'install', token: await this.internToken(internRepo) },
+      { ref: 'main', inputs: { dispatch: JSON.stringify(dispatch) } },
+    );
+    if (r.status === 403 || r.status === 404)
+      throw new PermissionError(`dispatch to ${internRepo} refused (${r.status})`);
+    if (!r.ok) throw new Error(`GitHub dispatch failed: ${r.status}`);
   }
 
   private async wideReq(method: string, path: string, body?: unknown) {

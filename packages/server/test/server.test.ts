@@ -172,6 +172,49 @@ describe('signup and passkeys', () => {
   });
 });
 
+describe('planner dispatch', () => {
+  it('fires dispatch_agent once per successful save, with the range and no issue/pr', async () => {
+    const h = harness();
+    await h.signup(auth());
+    const base = h.github.head().sha;
+    h.github.cursor = base;
+    const r = await h.req('PUT', '/api/r/o/r/spec', {
+      content: SPEC0 + 'New @n;\n',
+      base_sha: base,
+    });
+    expect(r.status).toBe(200);
+    const j = (await r.json()) as any;
+    expect(j.planner).toBe('dispatched');
+    expect(h.github.dispatches).toHaveLength(1);
+    const { intern, workflow, dispatch } = h.github.dispatches[0] as any;
+    expect([intern, workflow]).toEqual(['o/the-intern', 'dispatcher.yml']);
+    expect(dispatch.context).toMatchObject({
+      kind: 'planner',
+      project: 'r',
+      before: base,
+      after: j.head_sha,
+    });
+    expect(dispatch.issue).toBeUndefined();
+    expect(dispatch.pr).toBeUndefined();
+    expect(dispatch.callback).toEqual({ repo: 'o/specage', workflow: 'callback.yml' });
+    // a stale save and a lint failure dispatch nothing
+    await h.req('PUT', '/api/r/o/r/spec', { content: SPEC0, base_sha: base });
+    await h.req('PUT', '/api/r/o/r/spec', { content: 'a @x; b @x;\n', base_sha: j.head_sha });
+    expect(h.github.dispatches).toHaveLength(1);
+  });
+  it('keeps the save when the dispatch fails', async () => {
+    const h = harness();
+    await h.signup(auth());
+    h.github.dispatchError = new Error('boom');
+    const r = await h.req('PUT', '/api/r/o/r/spec', {
+      content: SPEC0 + 'New @n;\n',
+      base_sha: h.github.head().sha,
+    });
+    expect(r.status).toBe(200);
+    expect(((await r.json()) as any).planner).toBe('failed');
+  });
+});
+
 describe('CSRF', () => {
   it('rejects missing/mismatched origin, missing header, bad token', async () => {
     const h = harness();
