@@ -1,0 +1,70 @@
+name: callback
+# Fired by the-intern's `callback` job when a dispatch_agent run for specage ends.
+# The payload is a hint only: `specage callback` re-reads the PR from GitHub, verifies it,
+# then redispatches with a correction (attempt < max_attempts), marks the work item, or updates its state.
+on:
+  workflow_dispatch:
+    inputs:
+      status: {description: 'success | failure | cancelled', required: true}
+      run_url: {required: false}
+      pr: {required: false}
+      issue: {required: false}
+      branch: {required: false}
+      head_sha: {required: false}
+      context: {description: 'JSON echoed from the dispatch', required: true}
+permissions:
+  contents: read
+concurrency:
+  group: callback-${{ github.event.inputs.issue || github.event.inputs.pr || github.run_id }}
+  cancel-in-progress: false
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      INTERN_REPO: ${{ vars.INTERN_REPO || 'TheDeepestSpace/the-intern' }}
+      DATA_REPO: ${{ vars.SPECAGE_DATA_REPO || 'TheDeepestSpace/specage-data' }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with: {node-version: 22, cache: npm}
+      - run: npm ci --ignore-scripts
+      - run: npx tsc -b packages/core packages/cli
+      # specage App installation token: Contents rw on the data repo (trail), Pull requests/Issues read on
+      # project repos, Actions write on the-intern (to dispatch). Its login must be a key of dispatch.callers.
+      - id: app
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ vars.SPECAGE_APP_ID }}
+          private-key: ${{ secrets.SPECAGE_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+      - name: Check out the trail branch
+        env: {GH_TOKEN: '${{ steps.app.outputs.token }}', CONTEXT: '${{ inputs.context }}'}
+        run: |
+          set -euo pipefail
+          project=$(jq -er '.project | select(test("^[A-Za-z0-9_.-]+$"))' <<<"$CONTEXT")
+          echo "PROJECT=$project" >> "$GITHUB_ENV"
+          git clone --quiet --branch "specages/$project/trail" \
+            "https://x-access-token:${GH_TOKEN}@github.com/${DATA_REPO}.git" "$RUNNER_TEMP/trail"
+      - name: Verify and act
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          CONTEXT: ${{ inputs.context }}
+          STATUS: ${{ inputs.status }}
+          RUN_URL: ${{ inputs.run_url }}
+          PR: ${{ inputs.pr }}
+          ISSUE: ${{ inputs.issue }}
+          OWNER: ${{ github.repository_owner }}
+          SPECAGE_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          node packages/cli/dist/bin.js callback --status "$STATUS" --context "$CONTEXT" \
+            ${PR:+--pr "$PR"} ${ISSUE:+--issue "$ISSUE"} ${RUN_URL:+--run-url "$RUN_URL"} \
+            --owner "$OWNER" --state-dir "$RUNNER_TEMP/trail" \
+            --intern "$INTERN_REPO" --specage-repo "$SPECAGE_REPO" --data-repo "$DATA_REPO"
+      - name: Commit the state change
+        env: {GH_TOKEN: '${{ steps.app.outputs.token }}', STATUS: '${{ inputs.status }}'}
+        run: |
+          cd "$RUNNER_TEMP/trail"
+          git config user.name "specage-app[bot]"; git config user.email "specage-app[bot]@users.noreply.github.com"
+          node "$GITHUB_WORKSPACE/packages/cli/dist/bin.js" state commit -m "callback: $STATUS" --dir .

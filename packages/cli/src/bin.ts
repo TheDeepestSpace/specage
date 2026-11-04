@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { CliError, parseArgs } from './util.js';
 import {
+  cmdCallback,
   cmdCursor,
   cmdDiff,
   cmdHash,
@@ -19,7 +20,8 @@ const HELP = `specage <command>
   diff --from <ref|file|empty|dispatch/latest> --to <ref|file> [--spec-file <name>] [--project <name>] [--json]
   state validate <dir> | state commit -m <msg> [--dir <checkout>]
   cursor [--tag <dispatch tag>] [--project <name>]
-  outbox fire --range <a>..<b> --repo <o/r> --intern <o/r> [--dry-run]
+  outbox fire --range <a>..<b> --repo <o/r> --intern <o/r> --project <p> --data-repo <o/r> [--specage-repo <o/r>] [--dry-run]
+  callback --status <s> --context <json> [--pr <n>] [--issue <n>] [--state-dir <trail checkout>] [--intern <o/r> --specage-repo <o/r> --data-repo <o/r>] [--dry-run]
   render --spec <file> --state <dir> --out <dir>
 
 exit codes: 0 ok, 1 lint/validation errors, 2 usage, 3 git/GitHub error`;
@@ -46,6 +48,8 @@ async function main(): Promise<number> {
       return cmdCursor(a);
     case 'outbox':
       return cmdOutbox(a);
+    case 'callback':
+      return cmdCallback(a);
     case 'render':
       return cmdRender(a);
     default:

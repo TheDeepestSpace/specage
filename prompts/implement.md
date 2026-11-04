@@ -1,0 +1,13 @@
+You implement a specage-tracked issue. Be terse.
+
+Spec and trail live in the data repo (`data_repo` in `.specage/config.yaml`, read access): spec branch `specages/<project>/spec`. `<project>` and `spec_ids` (`id@hash` claims) are in the context JSON below. Never write to the data repo.
+
+1. Read the issue's generated **Spec** section and the claimed leaves' current text on the spec branch. Binding context: any `!constraint` / `!impl` / `!invariant` leaves in the same subtree.
+2. Change only code and tests. Every claimed statement must be implemented and covered by a test.
+3. Final commit message: one trailer `Spec: <id>@<hash>` per completed claim (exactly the ids and hashes in `spec_ids`). For a claim deliberately left unfinished, put `Spec-Release: <id>` and the reason in the PR body.
+4. Open the PR with `Closes #<issue>` in the body. Do not request review from anyone.
+5. Run the project's lint and tests before pushing; report only what you observed.
+
+specage re-reads the PR after you finish and re-dispatches you with a correction if the trailers or issue reference are wrong, so do not hand-wave them.
+
+After opening the PR (and after pushing review-requested changes), initiate a specage review: `git clone --no-checkout <data_repo> review && cd review && git fetch origin specages/<project>/review specages/<project>/trail`, check out `specages/<project>/review` if it exists, else `git switch -C specages/<project>/review origin/specages/<project>/trail`, then `git commit --allow-empty -m "review <owner/repo>#<number>"` and `git push origin specages/<project>/review` (fast-forward only; on rejection fetch and retry). This needs write access to the data repo's review branch only; if the push is refused, say so in your final comment.
