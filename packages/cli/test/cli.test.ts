@@ -1,5 +1,6 @@
 import { execFileSync, spawnSync } from 'node:child_process';
 import { buildDispatch } from '../src/dispatch.js';
+import { buildPlannerDispatch } from '@specage/core';
 import { decide, verifyPr, type PrFacts } from '../src/verify.js';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -382,5 +383,41 @@ describe('dispatch_agent', () => {
     expect(r.code).toBe(0);
     expect(readFileSync(join(d, 'work.yaml'), 'utf8')).toContain('state: failed');
     expect(run(['state', 'validate', d]).code).toBe(0);
+  });
+});
+
+describe('planner dispatch', () => {
+  const sha = (c: string) => c.repeat(40);
+  const o = {
+    repo: 'o/r',
+    data_repo: 'o/d',
+    specage_repo: 'o/specage',
+    prompt_ref: 'main',
+    project: 'r',
+    before: sha('a'),
+    after: sha('b'),
+  };
+  it('targets no issue/pr and carries the range', () => {
+    const d: any = buildPlannerDispatch(o);
+    expect(d.prompt).toBe('o/specage:prompts/discovery.md@main');
+    expect(d.issue).toBeUndefined();
+    expect(d.pr).toBeUndefined();
+    expect(d.context).toMatchObject({ kind: 'planner', before: sha('a'), after: sha('b') });
+  });
+  it('allows a first run (no cursor) and rejects bad shas', () => {
+    expect((buildPlannerDispatch({ ...o, before: null }) as any).context.before).toBeNull();
+    expect(() => buildPlannerDispatch({ ...o, after: 'HEAD' })).toThrow();
+  });
+  it('callback for a planner run needs no PR and fails only on a failed run', () => {
+    const ctx = JSON.stringify({
+      project: 'r',
+      repo: 'o/r',
+      kind: 'planner',
+      attempt: 1,
+      max_attempts: 1,
+      spec_ids: [],
+    });
+    expect(run(['callback', '--status', 'success', '--context', ctx]).code).toBe(0);
+    expect(run(['callback', '--status', 'failure', '--context', ctx]).code).toBe(1);
   });
 });

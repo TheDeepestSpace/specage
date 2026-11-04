@@ -17,6 +17,8 @@ export interface Env {
   dataRepo: string;
   /** the-intern repo whose dispatcher workflow runs the agent (written into project config) */
   internRepo: string;
+  /** repo hosting prompts/ and callback.yml for dispatch_agent runs */
+  specageRepo: string;
   dbPath: string;
   webDist: string;
 }
@@ -60,6 +62,7 @@ export function loadEnv(e: NodeJS.ProcessEnv = process.env): Env {
     devGithubToken: e.DEV_GITHUB_TOKEN,
     dataRepo,
     internRepo: e.INTERN_REPO ?? 'TheDeepestSpace/the-intern',
+    specageRepo: e.SPECAGE_REPO ?? 'TheDeepestSpace/specage',
     dbPath: e.DB_PATH ?? (dev ? resolve('specage-dev.db') : '/data/specage.db'),
     webDist: resolve(e.WEB_DIST ?? join(here, '..', '..', 'web', 'dist')),
   };

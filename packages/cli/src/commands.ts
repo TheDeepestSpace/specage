@@ -313,6 +313,11 @@ export function cmdCallback(a: Args): number {
   const owner = str(a, 'owner');
   if (owner && ctx.repo.split('/')[0] !== owner)
     throw new CliError(`context.repo is outside ${owner}`);
+  if (ctx.kind === 'planner') {
+    // a planner session has no PR to verify and no work item; the run's outcome is all there is
+    out(JSON.stringify({ action: 'none', kind: 'planner', status }));
+    return status === 'success' ? 0 : 1;
+  }
   const pr = status === 'success' && prNum ? prFacts(ctx.repo, prNum) : null;
   const d = decide(payload, pr, issue);
   out(JSON.stringify(d));
