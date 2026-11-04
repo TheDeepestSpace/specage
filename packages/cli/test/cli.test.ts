@@ -1,4 +1,6 @@
 import { execFileSync, spawnSync } from 'node:child_process';
+import { buildDispatch } from '../src/dispatch.js';
+import { decide, verifyPr, type PrFacts } from '../src/verify.js';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -212,19 +214,23 @@ describe('outbox fire', () => {
       'o/r',
       '--intern',
       'o/the-intern',
+      '--project',
+      'r',
+      '--data-repo',
+      'o/data',
       '--cwd',
       d,
       '--dry-run',
     ];
     const r = run([...args, '--range', `${first}..${second}`]);
     expect(r.code).toBe(0);
-    expect(r.out).toContain('pr_number=9');
-    expect(r.out).toContain('backend=claude Implement #9');
-    expect(r.out).not.toContain('pr_number=5');
+    expect(r.out).toContain('\\"pr\\":9');
+    expect(r.out).toContain('prompts/amend.md@main');
+    expect(r.out).not.toContain('\\"issue\\":5');
     // new branch: before is all zeros => every entry
     const all = run([...args, '--range', `${'0'.repeat(40)}..${second}`]);
-    expect(all.out).toContain('pr_number=5');
-    expect(all.out).toContain('pr_number=9');
+    expect(all.out).toContain('\\"issue\\":5');
+    expect(all.out).toContain('prompts/implement.md@main');
   });
 });
 
@@ -260,5 +266,121 @@ describe('bundle (what `npx github:...` runs)', () => {
     const r = spawnSync('node', [copy, 'lint', FIX], { encoding: 'utf8', cwd: dir });
     expect(r.status, r.stderr).toBe(0);
     expect(r.stdout).toContain('0 error(s)');
+  });
+});
+
+describe('dispatch_agent', () => {
+  const ctx = {
+    project: 'p',
+    repo: 'o/r',
+    issue: 7,
+    kind: 'implement' as const,
+    spec_ids: ['shoot.burst@aaaaaaaaaaaa', 'shoot.cap@bbbbbbbbbbbb'],
+    attempt: 1,
+    max_attempts: 2,
+  };
+  const pr = (o: Partial<PrFacts> = {}): PrFacts => ({
+    number: 9,
+    state: 'open',
+    merged: false,
+    body: 'Closes #7',
+    commits: ['feat\n\nSpec: shoot.burst@aaaaaaaaaaaa\nSpec: shoot.cap@bbbbbbbbbbbb'],
+    ...o,
+  });
+  const pay = (c = ctx, status: 'success' | 'failure' | 'cancelled' = 'success') => ({
+    status,
+    context: c,
+  });
+
+  it('builds a pinned-prompt dispatch with a callback and refuses bad attempts', () => {
+    const o = {
+      kind: 'implement' as const,
+      repo: 'o/r',
+      data_repo: 'o/data',
+      specage_repo: 'o/specage',
+      prompt_ref: 'main',
+      project: 'p',
+      spec_ids: ['a@aaaaaaaaaaaa'],
+      issue: 7,
+    };
+    const d: any = buildDispatch(o);
+    expect(d.prompt).toBe('o/specage:prompts/implement.md@main');
+    expect(d.callback).toEqual({ repo: 'o/specage', workflow: 'callback.yml' });
+    expect(d.issue).toBe(7);
+    expect(d.context).toMatchObject({ project: 'p', attempt: 1, max_attempts: 3 });
+    expect(d.access).toEqual([{ repo: 'o/data', scope: 'read' }]);
+    expect(() => buildDispatch({ ...o, attempt: 4, max_attempts: 3 })).toThrow(/exceeds/);
+    expect(() => buildDispatch({ ...o, issue: undefined })).toThrow(/issue/);
+    expect(() => buildDispatch({ ...o, kind: 'amend' })).toThrow(/pr/);
+    expect(() => buildDispatch({ ...o, prompt_ref: '../x' })).toThrow(/ref/);
+  });
+
+  it('accepts a PR with every trailer and Closes #N', () => {
+    expect(decide(pay(), pr(), 7)).toEqual({ action: 'ok', state: 'in_review' });
+  });
+  it('rejects missing, malformed, stale and foreign trailers', () => {
+    const p = verifyPr(
+      pr({
+        commits: ['x\n\nSpec: shoot.burst@cccccccccccc\nSpec: nope@aaaaaaaaaaaa\nSpec: bad'],
+      }),
+      ctx,
+      7,
+    );
+    expect(p.join('\n')).toMatch(/stale hash/);
+    expect(p.join('\n')).toMatch(/does not claim/);
+    expect(p.join('\n')).toMatch(/malformed trailer/);
+    expect(p.join('\n')).toMatch(/shoot\.cap@bbbbbbbbbbbb has no/);
+  });
+  it('Spec-Release in the body excuses a claim; Closes #N is required', () => {
+    const c = pr({
+      commits: ['x\n\nSpec: shoot.burst@aaaaaaaaaaaa'],
+      body: 'Spec-Release: shoot.cap\nCloses #7',
+    });
+    expect(verifyPr(c, ctx, 7)).toEqual([]);
+    expect(verifyPr({ ...c, body: 'Spec-Release: shoot.cap' }, ctx, 7)).toEqual([
+      'PR body must say "Closes #7"',
+    ]);
+  });
+  it('retries below the cap, gives up at it', () => {
+    const bad = pr({ commits: ['no trailers'] });
+    const d = decide(pay(), bad, 7);
+    expect(d).toMatchObject({ action: 'redispatch', attempt: 2 });
+    if (d.action === 'redispatch') expect(d.correction).toContain('shoot.burst@aaaaaaaaaaaa');
+    expect(decide(pay({ ...ctx, attempt: 2 }), bad, 7)).toMatchObject({
+      action: 'mark',
+      state: 'needs_human',
+    });
+  });
+  it('maps run failure, closed and merged PRs to states', () => {
+    expect(decide(pay(ctx, 'failure'), null)).toMatchObject({ action: 'mark', state: 'failed' });
+    expect(decide(pay(ctx, 'cancelled'), null)).toMatchObject({ action: 'mark', state: 'failed' });
+    expect(decide(pay(), pr({ state: 'closed' }), 7)).toMatchObject({ state: 'needs_human' });
+    expect(decide(pay(), pr({ state: 'closed', merged: true }), 7)).toEqual({
+      action: 'ok',
+      state: 'merged',
+    });
+    expect(decide(pay(), null, 7)).toMatchObject({ action: 'redispatch' });
+  });
+
+  it('callback --dry-run on failure marks the work item', () => {
+    const d = tmp();
+    writeFileSync(
+      join(d, 'work.yaml'),
+      'items:\n  - {id: w1, issue: 7, pr: null, state: in_progress}\n',
+    );
+    const r = run([
+      'callback',
+      '--status',
+      'failure',
+      '--context',
+      JSON.stringify(ctx),
+      '--issue',
+      '7',
+      '--state-dir',
+      d,
+    ]);
+    expect(r.code).toBe(0);
+    expect(readFileSync(join(d, 'work.yaml'), 'utf8')).toContain('state: failed');
+    expect(run(['state', 'validate', d]).code).toBe(0);
   });
 });

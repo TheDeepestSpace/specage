@@ -68,7 +68,7 @@ export const WorkItemSchema = z.object({
   id: z.string(),
   issue: z.number().nullable().default(null),
   pr: z.number().nullable().default(null),
-  state: z.enum(['filed', 'in_progress', 'in_review', 'merged', 'closed']),
+  state: z.enum(['filed', 'in_progress', 'in_review', 'merged', 'closed', 'failed', 'needs_human']),
   relations: z
     .array(
       z.union([
@@ -102,6 +102,8 @@ export const OutboxSchema = z.object({
   kind: z.enum(['implement', 'amend', 'answer', 'continue']),
   target: z.number().int().positive(),
   body: z.string(),
+  /** `id@hash` claims the dispatched run must satisfy (verified on callback) */
+  spec_ids: z.array(z.string()).default([]),
   created: z.string(),
 });
 export type OutboxEntry = z.infer<typeof OutboxSchema>;

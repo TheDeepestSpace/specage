@@ -14,6 +14,9 @@ import {
   type Diagnostic,
   type SpecNode,
 } from '@specage/core';
+import { setWorkState } from './callback.js';
+import { buildDispatch, dispatchCommand, type DispatchContext } from './dispatch.js';
+import { decide, type CallbackPayload, type PrFacts } from './verify.js';
 import {
   CliError,
   cursorTag,
@@ -222,7 +225,9 @@ export function addedOutbox(range: string, cwd: string): string[] {
 
 export function cmdOutbox(a: Args): number {
   if (a._[1] !== 'fire')
-    throw new CliError('usage: specage outbox fire --range <a>..<b> --repo <o/r> --intern <o/r>');
+    throw new CliError(
+      'usage: specage outbox fire --range <a>..<b> --repo <o/r> --intern <o/r> --project <p> --data-repo <o/r>',
+    );
   const range = str(a, 'range');
   const repo = str(a, 'repo');
   const intern = str(a, 'intern');
@@ -231,35 +236,117 @@ export function cmdOutbox(a: Args): number {
   const workflow = str(a, 'workflow') ?? 'dispatcher.yml';
   const backend = str(a, 'backend') ?? 'claude';
   const cwd = str(a, 'cwd') ?? '.';
+  const project = str(a, 'project');
+  const dataRepo = str(a, 'data-repo');
+  const specageRepo = str(a, 'specage-repo') ?? 'TheDeepestSpace/specage';
+  if (!project || !dataRepo) throw new CliError('outbox fire needs --project and --data-repo');
   const [, b] = range.split('..');
   let failed = 0;
   for (const f of addedOutbox(range, cwd)) {
     const entry = OutboxSchema.parse(JSON.parse(git(['show', `${b}:${f}`], cwd)));
-    const body = `backend=${backend} ${entry.body}`;
-    const cmd = [
-      'workflow',
-      'run',
-      workflow,
-      '-R',
-      intern,
-      '-f',
-      `target_repo=${repo}`,
-      '-f',
-      `pr_number=${entry.target}`,
-      '-f',
-      `comment_body=${body}`,
-    ];
-    if (a.flags['dry-run']) out(`gh ${cmd.map((c) => JSON.stringify(c)).join(' ')}`);
-    else
-      try {
+    const implement = entry.kind === 'implement';
+    try {
+      const dispatch = buildDispatch({
+        kind: implement ? 'implement' : 'amend',
+        repo,
+        data_repo: dataRepo,
+        specage_repo: specageRepo,
+        prompt_ref: str(a, 'prompt-ref') ?? 'main',
+        project,
+        spec_ids: entry.spec_ids,
+        ...(implement ? { issue: entry.target } : { pr: entry.target }),
+        backend,
+        model: str(a, 'model'),
+        max_attempts: Number(str(a, 'max-attempts')) || undefined,
+        correction: implement ? undefined : entry.body,
+      });
+      const cmd = dispatchCommand(intern, workflow, dispatch);
+      if (a.flags['dry-run']) out(`gh ${cmd.map((c) => JSON.stringify(c)).join(' ')}`);
+      else {
         gh(cmd);
         out(`fired ${entry.id} -> #${entry.target}`);
-      } catch (e: any) {
-        failed++;
-        out(`FAILED ${entry.id}: ${e.message}`);
       }
+    } catch (e: any) {
+      failed++;
+      out(`FAILED ${entry.id}: ${e.message}`);
+    }
   }
   return failed ? 3 : 0;
+}
+
+function prFacts(repo: string, n: number): PrFacts {
+  const pr = JSON.parse(gh(['api', `repos/${repo}/pulls/${n}`]));
+  const commits = JSON.parse(gh(['api', '--paginate', `repos/${repo}/pulls/${n}/commits`]));
+  return {
+    number: n,
+    state: pr.state,
+    merged: !!pr.merged,
+    body: pr.body ?? '',
+    commits: commits.map((c: any) => c.commit.message as string),
+  };
+}
+
+/** `specage callback`: the-intern's callback workflow. Re-reads GitHub, verifies, redispatches or marks state. */
+export function cmdCallback(a: Args): number {
+  const status = str(a, 'status');
+  if (status !== 'success' && status !== 'failure' && status !== 'cancelled')
+    throw new CliError('callback needs --status success|failure|cancelled');
+  let ctx: DispatchContext;
+  try {
+    ctx = JSON.parse(str(a, 'context') ?? '');
+  } catch {
+    throw new CliError('callback needs --context <json>');
+  }
+  const prNum = Number(str(a, 'pr')) || undefined;
+  const issue = Number(str(a, 'issue')) || ctx.issue;
+  const payload: CallbackPayload = {
+    status,
+    run_url: str(a, 'run-url'),
+    pr: prNum,
+    issue,
+    context: ctx,
+  };
+  if (!/^[\w.-]+\/[\w.-]+$/.test(ctx.repo ?? ''))
+    throw new CliError('context.repo missing or invalid');
+  if (!Number.isInteger(ctx.attempt) || !Number.isInteger(ctx.max_attempts))
+    throw new CliError('context.attempt / max_attempts missing');
+  const owner = str(a, 'owner');
+  if (owner && ctx.repo.split('/')[0] !== owner)
+    throw new CliError(`context.repo is outside ${owner}`);
+  const pr = status === 'success' && prNum ? prFacts(ctx.repo, prNum) : null;
+  const d = decide(payload, pr, issue);
+  out(JSON.stringify(d));
+  const stateDir = str(a, 'state-dir');
+  const at = { issue, pr: prNum };
+  if (d.action === 'redispatch') {
+    const specage = str(a, 'specage-repo');
+    const data = str(a, 'data-repo');
+    const intern = str(a, 'intern');
+    if (!specage || !data || !intern)
+      throw new CliError('redispatch needs --specage-repo, --data-repo and --intern');
+    const dispatch = buildDispatch({
+      kind: prNum ? 'amend' : ctx.kind,
+      repo: ctx.repo,
+      data_repo: data,
+      specage_repo: specage,
+      prompt_ref: str(a, 'prompt-ref') ?? 'main',
+      project: ctx.project,
+      spec_ids: ctx.spec_ids,
+      issue,
+      pr: prNum,
+      backend: str(a, 'backend'),
+      model: str(a, 'model'),
+      attempt: d.attempt,
+      max_attempts: ctx.max_attempts,
+      correction: d.correction,
+    });
+    const cmd = dispatchCommand(intern, str(a, 'workflow') ?? 'dispatcher.yml', dispatch);
+    if (a.flags['dry-run']) out(`gh ${cmd.map((c) => JSON.stringify(c)).join(' ')}`);
+    else gh(cmd);
+    if (stateDir) setWorkState(stateDir, at, 'in_progress');
+  } else if (stateDir && !setWorkState(stateDir, at, d.state))
+    out(`no work item for issue=${issue ?? '-'} pr=${prNum ?? '-'}; state unchanged`);
+  return 0;
 }
 
 export function cmdRender(a: Args): number {
