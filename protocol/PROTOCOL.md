@@ -15,7 +15,7 @@ Run the CLI with `npx --yes github:TheDeepestSpace/specage#v0 <cmd>` (call it `s
 4. **Reconcile** every entry (ladder below).
 5. **Group** gaps into work items and file issues.
 6. Write `trace.yaml`, `work.yaml`, `questions.yaml`, `thread-events.yaml` (if you replied to or resolved threads), `dispatches/<tag>.md` and any `outbox/` entries. Run `specage state validate`, then `specage state commit -m "dispatch <tag>"`. One commit per session.
-7. Post the report where the dispatch was started, then **advance the cursor** only after everything above succeeded: `git push origin <sha>:refs/specage/dispatched/<project>` (create it if missing; fast-forward only, never force). If the session fails earlier, leave the cursor so the next dispatch re-diffs the same changes. The specage server never moves the cursor.
+7. Post the report where the dispatch was started (a dispatch from the-intern may carry no repo, issue or PR; then there is nothing to post to, and `dispatches/<tag>.md` is the report), then **advance the cursor** only after everything above succeeded: `git push origin <sha>:refs/specage/dispatched/<project>` (create it if missing; fast-forward only, never force). If the session fails earlier, leave the cursor so the next dispatch re-diffs the same changes. The specage server never moves the cursor.
 
 ## Reconcile ladder
 
