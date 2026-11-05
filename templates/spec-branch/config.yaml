@@ -9,6 +9,8 @@ intern:
   repo: {{intern_repo}}
   workflow: {{intern_workflow}}
   backend: {{backend}}
+  # complexity tier -> model/effort the planner copies into outbox entries (optional)
+  tiers: {}
 auto_implement: true
 pages:
   mode: {{pages_mode}}

@@ -233,6 +233,40 @@ describe('outbox fire', () => {
     expect(all.out).toContain('\\"issue\\":5');
     expect(all.out).toContain('prompts/implement.md@main');
   });
+  it('--unfired skips fired entries and uses per-entry model/effort', () => {
+    const d = tmp();
+    mkdirSync(join(d, 'outbox'));
+    const base = { kind: 'implement', body: '', created: 'x' };
+    writeFileSync(
+      join(d, 'outbox/a.json'),
+      JSON.stringify({ ...base, id: 'a', target: 5, model: 'm-big', effort: 'high' }),
+    );
+    writeFileSync(
+      join(d, 'outbox/b.json'),
+      JSON.stringify({ ...base, id: 'b', target: 6, fired: '2026-01-01T00:00:00Z' }),
+    );
+    const r = run([
+      'outbox',
+      'fire',
+      '--unfired',
+      '--repo',
+      'o/r',
+      '--intern',
+      'o/the-intern',
+      '--project',
+      'r',
+      '--data-repo',
+      'o/data',
+      '--cwd',
+      d,
+      '--dry-run',
+    ]);
+    expect(r.code, r.err).toBe(0);
+    expect(r.out).toContain('\\"issue\\":5');
+    expect(r.out).toContain('m-big');
+    expect(r.out).toContain('high');
+    expect(r.out).not.toContain('\\"issue\\":6');
+  });
 });
 
 describe('render', () => {

@@ -13,6 +13,10 @@ export const ConfigSchema = z.object({
     repo: z.string(),
     workflow: z.string().default('dispatcher.yml'),
     backend: z.string().default('claude'),
+    /** complexity tier -> model/effort; the planner rates an issue and copies its tier's values into the outbox entry */
+    tiers: z
+      .record(z.object({ model: z.string().optional(), effort: z.string().optional() }))
+      .default({}),
   }),
   auto_implement: z.boolean().default(true),
   pages: z.object({
@@ -105,6 +109,14 @@ export const OutboxSchema = z.object({
   /** `id@hash` claims the dispatched run must satisfy (verified on callback) */
   spec_ids: z.array(z.string()).default([]),
   created: z.string(),
+  /** planner's complexity rating, a key of `intern.tiers` */
+  complexity: z.string().optional(),
+  /** per-entry overrides of the config/CLI defaults, resolved from the tier by the planner */
+  backend: z.string().optional(),
+  model: z.string().optional(),
+  effort: z.string().optional(),
+  /** set by `outbox fire --unfired` once dispatched (idempotency mark) */
+  fired: z.string().optional(),
 });
 export type OutboxEntry = z.infer<typeof OutboxSchema>;
 

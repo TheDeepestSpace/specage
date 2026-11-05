@@ -18,7 +18,7 @@ export interface Args {
   flags: Record<string, string | boolean>;
 }
 
-const BOOL = new Set(['json', 'dry-run', 'upgrade', 'rulesets', 'help']);
+const BOOL = new Set(['json', 'dry-run', 'upgrade', 'rulesets', 'help', 'unfired']);
 
 export function parseArgs(argv: string[]): Args {
   const out: Args = { _: [], flags: {} };
