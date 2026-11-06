@@ -1,0 +1,66 @@
+name: fire-outbox
+# Fired by the-intern worker relay after a push to a trail branch. Dispatches every unfired outbox
+# entry through the-intern's dispatch_agent (backend/model/effort from the entry), then commits the
+# `fired` marks back to the trail branch. Safe to re-run: fired entries are skipped.
+on:
+  workflow_dispatch:
+    inputs:
+      repo: {description: 'project code repo (owner/repo)', required: true}
+      sha: {description: 'data-repo trail commit to read', required: true}
+      project: {description: 'project name', required: true}
+permissions:
+  contents: read
+concurrency:
+  group: fire-outbox-${{ inputs.project }}
+  cancel-in-progress: false
+jobs:
+  fire:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      INTERN_REPO: ${{ vars.INTERN_REPO || 'TheDeepestSpace/the-intern' }}
+      DATA_REPO: ${{ vars.SPECAGE_DATA_REPO || 'TheDeepestSpace/specage-data' }}
+      REPO: ${{ inputs.repo }}
+      SHA: ${{ inputs.sha }}
+      PROJECT: ${{ inputs.project }}
+    steps:
+      - name: Validate inputs
+        run: |
+          [[ "$REPO" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] || { echo "bad repo"; exit 1; }
+          [[ "$SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "bad sha"; exit 1; }
+          [[ "$PROJECT" =~ ^[A-Za-z0-9_.-]+$ ]] || { echo "bad project"; exit 1; }
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with: {node-version: 22, cache: npm}
+      - run: npm ci --ignore-scripts
+      - run: npx tsc -b packages/core packages/cli
+      # specage App token: Contents rw on the data repo, Actions write on the-intern.
+      - id: app
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ vars.SPECAGE_APP_ID }}
+          private-key: ${{ secrets.SPECAGE_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+      - name: Check out the trail at sha
+        env: {GH_TOKEN: '${{ steps.app.outputs.token }}'}
+        run: |
+          set -euo pipefail
+          git clone --quiet --no-checkout "https://x-access-token:${GH_TOKEN}@github.com/${DATA_REPO}.git" "$RUNNER_TEMP/trail"
+          cd "$RUNNER_TEMP/trail"
+          git fetch --quiet origin "specages/$PROJECT/trail"
+          git merge-base --is-ancestor "$SHA" FETCH_HEAD || { echo "sha is not on the trail branch"; exit 1; }
+          git checkout --quiet -B "specages/$PROJECT/trail" "$SHA"
+      - name: Fire unfired entries
+        env: {GH_TOKEN: '${{ steps.app.outputs.token }}'}
+        run: |
+          set -euo pipefail
+          node packages/cli/dist/bin.js outbox fire --unfired --cwd "$RUNNER_TEMP/trail" \
+            --repo "$REPO" --project "$PROJECT" --data-repo "$DATA_REPO" \
+            --intern "$INTERN_REPO" --specage-repo "$GITHUB_REPOSITORY"
+      - name: Commit fired marks
+        env: {GH_TOKEN: '${{ steps.app.outputs.token }}'}
+        run: |
+          cd "$RUNNER_TEMP/trail"
+          git diff --quiet -- outbox && { echo "nothing fired"; exit 0; }
+          git config user.name "specage-app[bot]"; git config user.email "specage-app[bot]@users.noreply.github.com"
+          node "$GITHUB_WORKSPACE/packages/cli/dist/bin.js" state commit -m "outbox: mark fired" --dir .

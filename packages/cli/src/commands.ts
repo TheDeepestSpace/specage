@@ -231,8 +231,9 @@ export function cmdOutbox(a: Args): number {
   const range = str(a, 'range');
   const repo = str(a, 'repo');
   const intern = str(a, 'intern');
-  if (!range || !repo || !intern)
-    throw new CliError('outbox fire needs --range, --repo and --intern');
+  const unfired = !!a.flags['unfired'];
+  if ((!range && !unfired) || !repo || !intern)
+    throw new CliError('outbox fire needs --range (or --unfired), --repo and --intern');
   const workflow = str(a, 'workflow') ?? 'dispatcher.yml';
   const backend = str(a, 'backend') ?? 'claude';
   const cwd = str(a, 'cwd') ?? '.';
@@ -240,10 +241,18 @@ export function cmdOutbox(a: Args): number {
   const dataRepo = str(a, 'data-repo');
   const specageRepo = str(a, 'specage-repo') ?? 'TheDeepestSpace/specage';
   if (!project || !dataRepo) throw new CliError('outbox fire needs --project and --data-repo');
-  const [, b] = range.split('..');
+  const b = range?.split('..')[1];
   let failed = 0;
-  for (const f of addedOutbox(range, cwd)) {
-    const entry = OutboxSchema.parse(JSON.parse(git(['show', `${b}:${f}`], cwd)));
+  // --unfired: every outbox/*.json in the working tree without a `fired` mark (idempotent; marks are written back)
+  const files = unfired
+    ? listFiles(join(cwd, 'outbox'))
+        .filter((f) => f.endsWith('.json'))
+        .map((f) => `outbox/${f}`)
+    : addedOutbox(range!, cwd);
+  for (const f of files) {
+    const raw = unfired ? readFileSync(join(cwd, f), 'utf8') : git(['show', `${b}:${f}`], cwd);
+    const entry = OutboxSchema.parse(JSON.parse(raw));
+    if (unfired && entry.fired) continue;
     const implement = entry.kind === 'implement';
     try {
       const dispatch = buildDispatch({
@@ -255,8 +264,9 @@ export function cmdOutbox(a: Args): number {
         project,
         spec_ids: entry.spec_ids,
         ...(implement ? { issue: entry.target } : { pr: entry.target }),
-        backend,
-        model: str(a, 'model'),
+        backend: entry.backend ?? backend,
+        model: entry.model ?? str(a, 'model'),
+        effort: entry.effort ?? str(a, 'effort'),
         max_attempts: Number(str(a, 'max-attempts')) || undefined,
         correction: implement ? undefined : entry.body,
       });
@@ -265,6 +275,11 @@ export function cmdOutbox(a: Args): number {
       else {
         gh(cmd);
         out(`fired ${entry.id} -> #${entry.target}`);
+        if (unfired)
+          writeFileSync(
+            join(cwd, f),
+            JSON.stringify({ ...JSON.parse(raw), fired: new Date().toISOString() }, null, 2) + '\n',
+          );
       }
     } catch (e: any) {
       failed++;
