@@ -33,6 +33,7 @@ import {
   sleep,
   str,
   type Args,
+  isBadNoreplyEmail,
 } from './util.js';
 
 type Out = (s: string) => void;
@@ -218,6 +219,16 @@ export function cmdState(a: Args): number {
       out('nothing to commit');
       return 0;
     }
+    let email = '';
+    try {
+      email = git(['config', 'user.email'], dir).trim();
+    } catch {
+      // unset: git will complain on its own
+    }
+    if (isBadNoreplyEmail(email))
+      throw new CliError(
+        `refusing to commit as ${email}: GitHub noreply emails must be <id>+<slug>[bot]@users.noreply.github.com`,
+      );
     git(['commit', '-m', msg], dir);
     const remote = str(a, 'remote') ?? 'origin';
     // default to the checked-out trail branch (specages/<project>/trail)
