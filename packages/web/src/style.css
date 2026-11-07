@@ -605,7 +605,7 @@ body .cm-tooltip.cm-tooltip-autocomplete {
   display: inline-block;
   color: #e8890c;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 13px;
+  font-size: 10px;
   font-weight: 700;
   line-height: 9px;
   margin: 6px 3px;
