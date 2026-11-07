@@ -5,6 +5,7 @@ import {
   NotFound,
   PermissionError,
   specBranch,
+  trailBranch,
   type GitHub,
   type RepoInfo,
 } from './github.js';
@@ -89,6 +90,11 @@ export class FakeGitHub implements GitHub {
     }
     this.commits.push({ sha: sha(this.commits.length), spec: o.content });
     return this.head().sha;
+  }
+  async commitTrail(_p: string, o: { path: string; content: string; message: string }) {
+    this.lastMessage = o.message;
+    this.files[`${trailBranch('r')}:${o.path}`] = o.content;
+    return sha(98);
   }
   lastMessage = '';
 }

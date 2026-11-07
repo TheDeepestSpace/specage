@@ -1,7 +1,14 @@
-import { nodeStatus, type SpecNode, type State, type Thread } from '@specage/core/browser';
+import {
+  nodeStatus,
+  type Question,
+  type SpecNode,
+  type State,
+  type Thread,
+} from '@specage/core/browser';
 import { ancestors, type Analysis } from './analysis.js';
 import { evidenceView } from './evidence.js';
 import { h } from './dom.js';
+import { questionsSection } from './questions.js';
 import { threadsPanel } from './threads.js';
 import { bodyText, chip } from './viewer.js';
 
@@ -10,6 +17,7 @@ export interface PaneCtx {
   state: State;
   threads: Thread[];
   onThreads(t: Thread[]): void;
+  onQuestions(q: Question[]): void;
   goto(n: SpecNode): void;
 }
 
@@ -34,8 +42,15 @@ export function renderPane(
     ' pin',
   );
   (pin.querySelector('input') as HTMLInputElement).checked = pinned;
+  const qctx = { repo: ctx.repo, onChange: ctx.onQuestions };
+  // top-level questions (their node was removed with no surviving ancestor) always show in the panel
+  const top = questionsSection(ctx.state.questions, '', qctx);
   if (!n || !n.id) {
-    el.replaceChildren(pin, h('p', { class: 'note' }, 'Place the cursor in a node.'));
+    el.replaceChildren(
+      pin,
+      ...(top ? [top] : []),
+      h('p', { class: 'note' }, 'Place the cursor in a node.'),
+    );
     return;
   }
 
@@ -104,12 +119,8 @@ export function renderPane(
       ),
     );
   }
-  const qs = ctx.state.questions.filter((q) => q.node === n.id && q.state === 'open');
-  if (qs.length)
-    body.append(
-      h('h4', {}, 'Questions'),
-      ...qs.map((q) => h('div', { class: 'question' }, h('strong', {}, `${q.kind}: `), q.text)),
-    );
+  const nq = questionsSection(ctx.state.questions, n.id, qctx);
+  if (nq) body.append(nq);
   body.append(
     threadsPanel(
       n as { id: string; hash: string },
@@ -157,5 +168,5 @@ export function renderPane(
       ),
     );
   }
-  el.replaceChildren(pin, crumbs, body);
+  el.replaceChildren(pin, ...(top ? [top] : []), crumbs, body);
 }

@@ -599,3 +599,35 @@ body .cm-tooltip.cm-tooltip-autocomplete {
   margin: 0.25rem 0;
   font: inherit;
 }
+
+/* ---- planner questions ---- */
+.q-badge {
+  display: inline-block;
+  color: #e8890c;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 9px;
+  margin: 6px 3px;
+  cursor: pointer;
+}
+.q-thread {
+  border-left-color: #e8890c;
+}
+.q-thread.q-resolved,
+.q-thread.q-withdrawn {
+  border-left-color: var(--c-verified, #3a3);
+  opacity: 0.8;
+}
+.q-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin: 0.3rem 0;
+}
+.q-thread textarea {
+  width: 100%;
+  box-sizing: border-box;
+  margin: 0.25rem 0;
+  font: inherit;
+}

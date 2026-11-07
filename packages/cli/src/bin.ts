@@ -8,6 +8,7 @@ import {
   cmdLint,
   cmdOutbox,
   cmdParse,
+  cmdQuestion,
   cmdRender,
   cmdState,
 } from './commands.js';
@@ -19,6 +20,7 @@ const HELP = `specage <command>
   hash <file> [--json]
   diff --from <ref|file|empty|dispatch/latest> --to <ref|file> [--spec-file <name>] [--project <name>] [--json]
   state validate <dir> | state commit -m <msg> [--dir <checkout>]
+  question anchor <removed-id> --from <ref|file> --to <ref|file>   (prints {node,node_hash?}; node '' = top-level)
   cursor [--tag <dispatch tag>] [--project <name>]
   outbox fire (--range <a>..<b> | --unfired --cwd <trail checkout>) --repo <o/r> --intern <o/r> --project <p> --data-repo <o/r> [--specage-repo <o/r>] [--dry-run]
   callback --status <s> --context <json> [--pr <n>] [--issue <n>] [--state-dir <trail checkout>] [--intern <o/r> --specage-repo <o/r> --data-repo <o/r>] [--dry-run]
@@ -44,6 +46,8 @@ async function main(): Promise<number> {
       return cmdDiff(a);
     case 'state':
       return cmdState(a);
+    case 'question':
+      return cmdQuestion(a);
     case 'cursor':
       return cmdCursor(a);
     case 'outbox':

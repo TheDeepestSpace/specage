@@ -24,6 +24,9 @@ import {
   flatten,
   buildPlannerDispatch,
   parseYaml,
+  QuestionsSchema,
+  answerQuestion,
+  QuestionError,
 } from '@specage/core';
 import YAML from 'yaml';
 import type { Db } from './db.js';
@@ -525,6 +528,52 @@ export function createApp({ env, db, github, now = Date.now }: Deps) {
       }
     }
     db.audit('comment', `${owner}/${repo}`, '409');
+    return c.json({ error: 'conflict, try again' }, 409);
+  });
+
+  // Planner questions: a human answer or follow-up is appended to the question's thread in
+  // questions.yaml on the trail branch. The question stays open until the planner resolves it, and
+  // the trail push makes the next planner run apply the answer.
+  app.post('/api/r/:owner/:repo/questions', async (c) => {
+    const { owner, repo } = c.req.param();
+    const limited = rateLimit(c);
+    if (limited) return limited;
+    const op = await c.req.json().catch(() => null);
+    if (!op || typeof op.id !== 'string') return c.json({ error: 'bad op' }, 400);
+    if (op.choice !== undefined && op.choice !== 'withdraw' && op.choice !== 'keep')
+      return c.json({ error: 'bad choice' }, 400);
+    const body = typeof op.body === 'string' ? op.body : undefined;
+    const author = db.cred(sess(c).cid)?.label ?? 'owner';
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const text = await github.getFile('questions.yaml', trailBranch(repo));
+      const cur = QuestionsSchema.safeParse((text === null ? undefined : parseYaml(text)) ?? []);
+      if (!cur.success) return c.json({ error: 'questions.yaml is invalid' }, 422);
+      let next;
+      try {
+        next = answerQuestion(
+          cur.data,
+          { id: op.id, choice: op.choice, body },
+          author,
+          new Date(now()).toISOString(),
+        );
+      } catch (e) {
+        if (e instanceof QuestionError) return c.json({ error: e.message }, 400);
+        throw e;
+      }
+      try {
+        await github.commitTrail(repo, {
+          path: 'questions.yaml',
+          content: YAML.stringify(next),
+          message: `questions: answer ${op.id}`,
+        });
+        db.audit('question', `${owner}/${repo}`, 'ok');
+        return c.json({ questions: next });
+      } catch (e) {
+        if (e instanceof NotFound) return c.json({ error: 'trail branch not found' }, 404);
+        if (!(e instanceof Conflict)) throw e;
+      }
+    }
+    db.audit('question', `${owner}/${repo}`, '409');
     return c.json({ error: 'conflict, try again' }, 409);
   });
 

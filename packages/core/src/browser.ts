@@ -10,6 +10,7 @@ export type {
   Trace,
   Work,
   Question,
+  QuestionMessage,
   Evidence,
   Thread,
   Comment,
@@ -17,3 +18,13 @@ export type {
 } from './schemas.js';
 export { mergeThreads, applyOp, MAX_COMMENT_LEN } from './comments.js';
 export type { CommentOp } from './comments.js';
+export {
+  MAX_ANSWER_LEN,
+  anchorQuestion,
+  answerQuestion,
+  dispatchBlocked,
+  openQuestions,
+  isTopLevel,
+  QuestionError,
+} from './questions.js';
+export type { AnswerOp } from './questions.js';

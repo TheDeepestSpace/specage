@@ -104,6 +104,11 @@ Contradictions and questions first. Then counts per outcome, then one line per n
 
 ## Questions
 
-Format in `questions.yaml`: id, node, node_hash, dispatch, kind (ambiguity | contradiction | reconcile | rename | split), text, options, state, answer.
+Format in `questions.yaml`: id, node, node_hash, dispatch, kind (ambiguity | contradiction | reconcile | rename | split), text, options, state, answer, plus:
+- `issue` (optional): the issue whose dispatch this question gates. Set it on reconcile questions about an issue.
+- `thread` (list of `{author, at, body, choice?}`): the Q&A. Humans append from the UI (`choice` is `withdraw` or `keep` when they pick one; free text otherwise). A human never changes `state`.
+- **Anchoring**: `node` is the nearest *surviving* ancestor of a removed node (`specage question anchor <removed-id> --from <old> --to <new>` prints it). If the removed node was a root, or no ancestor survives, `node: ""` and `node_hash` is omitted: a top-level question, shown in the side panel with no node selected.
+- **Applying answers**: each run, read `thread` of every open question. Apply a `withdraw`/`keep`/text answer (close, keep or update the issue, drop the unfired outbox entry). If satisfied, append a final `{author: the-intern, ...}` message and set `state: resolved`; otherwise append a follow-up message and leave it `open`. On resolve, record the decision on the issue (comment + body update) so the outcome is documented.
+- **Dispatch gating**: `specage outbox fire` holds every entry whose `target` has an `open` question with that `issue`. Held entries stay unfired and go out on the first fire after all such questions are resolved (the `fired` mark rules are unchanged).
 - `addressed` is automatic when the node's hash changed after the question was asked.
 - Mark `resolved` after confirming the edit settles it, or when the human answers on the dispatch issue.
