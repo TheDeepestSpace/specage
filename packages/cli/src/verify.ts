@@ -7,6 +7,8 @@ export interface PrFacts {
   state: 'open' | 'closed';
   merged: boolean;
   body: string;
+  /** head branch name; implement/amend PRs must use `specage/<name>` */
+  branch: string;
   /** full commit messages of the PR */
   commits: string[];
 }
@@ -40,6 +42,8 @@ export function verifyPr(pr: PrFacts, ctx: DispatchContext, issue?: number): str
     if (m) want.set(m[1], m[2]);
     else problems.push(`context claim "${c}" is not <id>@<12-hex hash>`);
   }
+  if (!/^specage\/[^/\s]+/.test(pr.branch))
+    problems.push(`PR branch "${pr.branch}" must be named specage/<name>`);
   const have = new Map<string, Set<string>>();
   for (const msg of pr.commits)
     for (const t of trailer(msg, 'Spec')) {
