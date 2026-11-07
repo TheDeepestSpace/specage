@@ -1,3 +1,4 @@
+import YAML from 'yaml';
 import { describe, expect, it } from 'vitest';
 import { RealGitHub, ALLOWED } from '../src/github.js';
 import { seal, unseal } from '../src/seal.js';
@@ -348,6 +349,66 @@ describe('API', () => {
     );
     expect(noCsrf.status).toBe(403);
   });
+  it('questions: every option type (colons, backticks, free text) round-trips', async () => {
+    const h = harness();
+    await h.signup(auth());
+    const key = 'specages/r/trail:questions.yaml';
+    const opts = [
+      'yes: carry trace/claims, retire `s-43c9243d`',
+      'no: keep `s-43c9243d` as is: separate node',
+    ];
+    h.github.files[key] = YAML.stringify(
+      ['a', 'b', 'c', 'd', 'e'].map((x) => ({
+        id: `q-${x}`,
+        node: '',
+        dispatch: 'd',
+        kind: 'reconcile',
+        text: 'Retire `s-43c9243d`: same thing?',
+        options: opts,
+        state: 'open',
+      })),
+    );
+    const post = (b: unknown) => h.req('POST', '/api/r/o/r/questions', b);
+    expect((await post({ id: 'q-a', choice: 'withdraw' })).status).toBe(200);
+    expect((await post({ id: 'q-b', choice: 'keep' })).status).toBe(200);
+    expect((await post({ id: 'q-c', body: opts[0] })).status).toBe(200);
+    expect((await post({ id: 'q-d', body: opts[1] })).status).toBe(200);
+    expect(
+      (await post({ id: 'q-e', body: 'free: text with `ticks` and # hash\nline 2' })).status,
+    ).toBe(200);
+    const st = (await (await h.req('GET', '/api/r/o/r/state')).json()) as any;
+    const bodies = st.questions.map((q: any) => q.thread[0].body);
+    expect(bodies).toEqual([
+      'Withdraw the issue.',
+      'Keep the issue.',
+      opts[0],
+      opts[1],
+      'free: text with `ticks` and # hash\nline 2',
+    ]);
+    expect(st.questions.every((q: any) => q.state === 'open')).toBe(true);
+  });
+  it('questions: expected failures are 4xx with a message; GitHub failures are 502', async () => {
+    const h = harness();
+    await h.signup(auth());
+    const key = 'specages/r/trail:questions.yaml';
+    const post = (b: unknown) => h.req('POST', '/api/r/o/r/questions', b);
+    h.github.files[key] = '- {id: q-1, dispatch: d, kind: reconcile, text: t, state: open}\n';
+    const long = await post({ id: 'q-1', body: 'x'.repeat(4001) });
+    expect(long.status).toBe(400);
+    expect(((await long.json()) as any).error).toMatch(/4000/);
+    expect((await post({ id: 'q-1', body: 5 })).status).toBe(400);
+    h.github.files[key] = '{not: [a list';
+    expect((await post({ id: 'q-1', body: 'x' })).status).toBe(422);
+    h.github.files[key] = '- {id: q-1, dispatch: d, kind: reconcile, text: t, state: open}\n';
+    const getFile = h.github.getFile.bind(h.github);
+    h.github.getFile = async (path: string, ref: string) => {
+      if (path === 'questions.yaml') throw new Error('GitHub 502');
+      return getFile(path, ref);
+    };
+    const r = await post({ id: 'q-1', body: 'x' });
+    expect(r.status).toBe(502);
+    expect(((await r.json()) as any).error).toMatch(/GitHub/);
+  });
   it('a save commits to the spec branch and leaves the cursor alone', async () => {
     const h = harness();
     await h.signup(auth());
@@ -473,13 +534,13 @@ describe('GitHub access', () => {
         u.pathname.includes('/specages/new/')
       )
         return j({}, 404);
-      if (u.pathname.endsWith('/git/ref/heads/specages/r/spec'))
+      if (/\/git\/ref\/heads\/specages\/r\/(spec|trail)$/.test(u.pathname))
         return j({ object: { sha: 'a'.repeat(40) } });
       if (u.pathname.includes('/git/commits/')) return j({ tree: { sha: 't' } });
       if (u.pathname.endsWith('/git/blobs')) return j({ sha: 'b' });
       if (u.pathname.endsWith('/git/trees')) return j({ sha: 't2' });
       if (u.pathname.endsWith('/git/commits')) return j({ sha: 'c'.repeat(40) });
-      if (u.pathname.endsWith('/git/refs/heads/specages/r/spec')) return j({});
+      if (/\/git\/refs\/heads\/specages\/r\/(spec|trail)$/.test(u.pathname)) return j({});
       if (u.pathname.endsWith('/git/refs')) return j({});
       if (u.pathname.includes('matching-refs/heads/specages/'))
         return j([{ ref: 'refs/heads/specages/r/spec' }, { ref: 'refs/heads/specages/r/trail' }]);
@@ -529,6 +590,7 @@ describe('GitHub access', () => {
       message: 'm',
       parentSha: 'a'.repeat(40),
     });
+    await gh.commitTrail('r', { path: 'questions.yaml', content: 'x', message: 'm' });
     expect(log.length).toBeGreaterThan(8);
     for (const l of log)
       expect(
@@ -570,7 +632,7 @@ describe('GitHub access', () => {
     await expect(
       (gh as any).req(
         'PATCH',
-        '/repos/o/specage-data/git/refs/heads/specages/r/trail',
+        '/repos/o/specage-data/git/refs/heads/specages/r/other',
         { kind: 'install', token: 't' },
         {},
       ),
