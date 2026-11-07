@@ -238,6 +238,64 @@ describe('outbox fire', () => {
     expect(bad.code).not.toBe(0);
     expect(bad.out + bad.err).toContain('data repo');
   });
+  it('holds entries whose issue has an open question; fires them once resolved (fired marks stay idempotent)', () => {
+    const d = tmp();
+    mkdirSync(join(d, 'outbox'));
+    const entry = (id: string, target: number) =>
+      JSON.stringify({ id, kind: 'implement', target, body: '', created: '2026-10-30T02:15:11Z' });
+    writeFileSync(join(d, 'outbox/o5.json'), entry('o5', 5));
+    writeFileSync(join(d, 'outbox/o6.json'), entry('o6', 6));
+    const q = (state: string) =>
+      `- {id: q-1, node: '', dispatch: d, kind: reconcile, text: t, state: ${state}, issue: 5}\n`;
+    writeFileSync(join(d, 'questions.yaml'), q('open'));
+    const args = [
+      'outbox',
+      'fire',
+      '--unfired',
+      '--intern',
+      'o/the-intern',
+      '--project',
+      'r',
+      '--data-repo',
+      'o/data',
+      '--repo',
+      'o/calc',
+      '--cwd',
+      d,
+      '--dry-run',
+    ];
+    const held = run(args);
+    expect(held.code).toBe(0);
+    expect(held.out).toContain('held o5 -> #5');
+    expect(held.out).toContain('\\"issue\\":6');
+    expect(held.out).not.toContain('\\"issue\\":5');
+    writeFileSync(join(d, 'questions.yaml'), q('resolved'));
+    const free = run(args);
+    expect(free.out).not.toContain('held');
+    expect(free.out).toContain('\\"issue\\":5');
+    // an already-fired entry is still skipped, resolved or not
+    writeFileSync(
+      join(d, 'outbox/o5.json'),
+      JSON.stringify({ ...JSON.parse(entry('o5', 5)), fired: 'x' }),
+    );
+    expect(run(args).out).not.toContain('\\"issue\\":5');
+  });
+  it('question anchor prints the nearest surviving ancestor', () => {
+    const d = tmp();
+    writeFileSync(join(d, 'old.specage'), 'Top @a { Leaf @a.b; };\n');
+    writeFileSync(join(d, 'new.specage'), 'Top @a;\n');
+    const r = run([
+      'question',
+      'anchor',
+      'a.b',
+      '--from',
+      join(d, 'old.specage'),
+      '--to',
+      join(d, 'new.specage'),
+    ]);
+    expect(r.code).toBe(0);
+    expect(JSON.parse(r.out).node).toBe('a');
+  });
   it('fires only entries ADDED in the range, via workflow_dispatch', () => {
     const d = tmp();
     git(d, 'init', '-q');

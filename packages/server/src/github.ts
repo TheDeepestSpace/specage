@@ -34,6 +34,14 @@ export interface GitHub {
   getFile(path: string, ref: string): Promise<string | null>;
   /** commit sha at a ref such as "heads/specages/x/spec" */
   getRef(ref: string): Promise<string | null>;
+  /**
+   * Commit one file to the project's trail branch on top of its current head (read inside the call).
+   * Throws Conflict if the branch moved meanwhile, NotFound if the trail branch is missing.
+   */
+  commitTrail(
+    project: string,
+    o: { path: string; content: string; message: string },
+  ): Promise<string>;
   /** last dispatched spec commit for a project (ref specage/dispatched/<project>), or null */
   getCursor(project: string): Promise<string | null>;
   /** repos the App installation can see (not limited to the data repo) */
@@ -390,6 +398,19 @@ export class RealGitHub implements GitHub {
       parentSha: string;
     },
   ) {
+    return this.commitOn(specBranch(project), o);
+  }
+
+  async commitTrail(project: string, o: { path: string; content: string; message: string }) {
+    const parentSha = await this.getRef(`heads/${trailBranch(project)}`);
+    if (!parentSha) throw new NotFound('trail branch');
+    return this.commitOn(trailBranch(project), { ...o, parentSha });
+  }
+
+  private async commitOn(
+    branch: string,
+    o: { path: string; content: string; message: string; parentSha: string },
+  ) {
     const must = async (r: Response) => {
       if (!r.ok) throw new Error(`GitHub ${r.status}`);
       return (await r.json()) as any;
@@ -411,7 +432,7 @@ export class RealGitHub implements GitHub {
         parents: [o.parentSha],
       }),
     );
-    const u = await this.repoReq('PATCH', `/git/refs/heads/${specBranch(project)}`, {
+    const u = await this.repoReq('PATCH', `/git/refs/heads/${branch}`, {
       sha: commit.sha,
       force: false,
     });

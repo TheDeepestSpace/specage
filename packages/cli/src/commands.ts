@@ -2,6 +2,10 @@ import { cpSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node
 import { join, resolve } from 'node:path';
 import {
   OutboxSchema,
+  QuestionsSchema,
+  anchorQuestion,
+  parseYaml,
+  dispatchBlocked,
   buildData,
   diff,
   flatten,
@@ -146,6 +150,23 @@ export function cmdDiff(a: Args): number {
   return 0;
 }
 
+/** `specage question anchor <removed-id> --from <old> --to <new>`: where a question about a removed node attaches. */
+export function cmdQuestion(a: Args): number {
+  const id = a._[2];
+  const from = str(a, 'from');
+  const to = str(a, 'to');
+  if (a._[1] !== 'anchor' || !id || !from || !to)
+    throw new CliError('usage: specage question anchor <removed-id> --from <old> --to <new>');
+  const opts = {
+    specFile: str(a, 'spec-file'),
+    to,
+    cwd: str(a, 'cwd'),
+    project: str(a, 'project'),
+  };
+  out(JSON.stringify(anchorQuestion(loadSpecRef(from, opts), loadSpecRef(to, opts), id)));
+  return 0;
+}
+
 export function cmdCursor(a: Args): number {
   const c = cursorTag(str(a, 'tag'), str(a, 'cwd'), str(a, 'project'));
   out(c ?? '');
@@ -235,6 +256,20 @@ export function addedOutbox(range: string, cwd: string): string[] {
   return names.filter((n) => /^outbox\/[^/]+\.json$/.test(n));
 }
 
+function loadQuestions(rev: string | undefined, cwd: string) {
+  let raw: string | null = null;
+  try {
+    raw = rev
+      ? git(['show', `${rev}:questions.yaml`], cwd)
+      : readFileSync(join(cwd, 'questions.yaml'), 'utf8');
+  } catch {
+    return [];
+  }
+  const r = QuestionsSchema.safeParse(parseYaml(raw) ?? []);
+  if (!r.success) throw new CliError('questions.yaml is invalid; refusing to fire the outbox');
+  return r.data;
+}
+
 export function cmdOutbox(a: Args): number {
   if (a._[1] !== 'fire')
     throw new CliError(
@@ -259,6 +294,8 @@ export function cmdOutbox(a: Args): number {
     throw new CliError(`--repo equals the data repo (${dataRepo}); refusing to dispatch there`);
   const b = range?.split('..')[1];
   let failed = 0;
+  // unresolved planner questions hold back the issue they gate; the entry stays queued (no fired mark)
+  const questions = loadQuestions(unfired ? undefined : b, cwd);
   // --unfired: every outbox/*.json in the working tree without a `fired` mark (idempotent; marks are written back)
   const files = unfired
     ? listFiles(join(cwd, 'outbox'))
@@ -269,6 +306,10 @@ export function cmdOutbox(a: Args): number {
     const raw = unfired ? readFileSync(join(cwd, f), 'utf8') : git(['show', `${b}:${f}`], cwd);
     const entry = OutboxSchema.parse(JSON.parse(raw));
     if (unfired && entry.fired) continue;
+    if (dispatchBlocked(questions, entry.target)) {
+      out(`held ${entry.id} -> #${entry.target}: unresolved question(s)`);
+      continue;
+    }
     const implement = entry.kind === 'implement';
     try {
       const dispatch = buildDispatch({

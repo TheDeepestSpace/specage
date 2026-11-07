@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
@@ -224,4 +224,81 @@ test('cross-origin writes are rejected (CSRF)', async () => {
     return r.status;
   });
   expect(s).toBe(403);
+});
+
+// ---- planner questions (the e2e server seeds q-0001 on shoot.cap and top-level q-0002, with a stand-in planner) ----
+const shot = async (name: string) => {
+  const dir = process.env.SHOTS_DIR;
+  if (!dir) return;
+  mkdirSync(dir, { recursive: true });
+  await page.screenshot({ path: join(dir, `${name}.png`) });
+};
+
+test('questions: orange ? badge on the node, top-level question in the panel, dispatch-held note', async () => {
+  await page.goto('/r/o/r');
+  await expect(page.locator('.cm-content')).toContainText('Limit magazine');
+  const badges = page.locator('.q-badge');
+  await expect(badges).toHaveCount(1);
+  // the badge sits on the shoot.cap line, to the right of the status dot
+  const line = page.locator('.cm-line', { hasText: 'Limit magazine' });
+  const lb = (await line.boundingBox())!;
+  const bb = (await badges.boundingBox())!;
+  const db = (await page.locator('.dot[data-status="verified"]').boundingBox())!;
+  expect(Math.abs(bb.y - lb.y)).toBeLessThan(lb.height);
+  expect(bb.x).toBeGreaterThan(db.x);
+  // top-level question shows in the side panel with no node selected
+  const top = page.locator('#top-questions [data-question="q-0002"]');
+  await expect(top).toContainText('Withdraw issue #8?');
+  await expect(top).toContainText('Holding dispatch of #8');
+  await shot('questions-badge-and-top-level');
+});
+
+test('questions: clicking the badge opens the node thread; answer, follow-up, resolve collapses', async () => {
+  await page.locator('.q-badge').click();
+  const q = page.locator('#node-questions [data-question="q-0001"]');
+  await expect(q).toBeVisible();
+  await expect(page.locator('#crumbs strong')).toHaveText('shoot.cap');
+  await expect(q).toContainText('Holding dispatch of #7');
+  await shot('questions-node-thread');
+  // answer with a standard choice: stays open and gets written to the trail
+  await q.getByRole('button', { name: 'Keep' }).click();
+  await expect(q.locator('.q-msg')).toHaveCount(1);
+  await expect(q.locator('.q-msg').first()).toContainText('Keep the issue.');
+  await expect(q).toHaveClass(/q-open/);
+  // the planner follows up in the same thread (the stand-in replies on the trail; reload to see it)
+  await page.reload();
+  await page.locator('.q-badge').click();
+  await expect(q.locator('.q-msg')).toHaveCount(2);
+  await expect(q.locator('.q-msg').last()).toContainText('Anything else');
+  await expect(q).toHaveClass(/q-open/);
+  await expect(page.locator('.q-badge')).toHaveCount(1);
+  // free-text follow-up; "done" makes the stand-in planner resolve it -> thread collapses
+  await q.getByLabel('Answer').fill('Keep it, but cap at 30. done');
+  await q.getByRole('button', { name: 'Send' }).click();
+  await expect(q.locator('.q-msg')).toHaveCount(3);
+  await page.reload();
+  await page.locator('.cm-line', { hasText: 'Limit magazine' }).click();
+  const resolved = page.locator('#node-questions details[data-question="q-0001"]');
+  await expect(resolved).toBeVisible();
+  await expect(resolved).not.toHaveAttribute('open', '');
+  await expect(resolved.locator('summary')).toContainText('resolved');
+  await expect(page.locator('.q-badge')).toHaveCount(0);
+  await shot('questions-resolved-collapsed');
+  // still expandable
+  await resolved.locator('summary').click();
+  await expect(resolved.locator('.q-msg')).toHaveCount(4);
+  // the other question is untouched and still visible
+  await expect(page.locator('#top-questions [data-question="q-0002"]')).toHaveClass(/q-open/);
+  // answers were persisted to the trail via the API
+  const st = await (await page.request.get('/api/r/o/r/state')).json();
+  expect(st.questions.find((x: any) => x.id === 'q-0001')).toMatchObject({ state: 'resolved' });
+  expect(st.questions.find((x: any) => x.id === 'q-0002').thread).toEqual([]);
+});
+
+test('questions: top-level question can be withdrawn from the panel', async () => {
+  const q = page.locator('#top-questions [data-question="q-0002"]');
+  await q.getByRole('button', { name: 'Withdraw', exact: true }).click();
+  await expect(q.locator('.q-msg').first()).toContainText('Withdraw the issue.');
+  await expect(q.locator('.q-msg').first()).toContainText('withdraw');
+  await shot('questions-top-level-answered');
 });

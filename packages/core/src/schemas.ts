@@ -98,16 +98,30 @@ export const WorkItemSchema = z.object({
 export const WorkSchema = z.object({ items: z.array(WorkItemSchema).default([]) });
 export type Work = z.infer<typeof WorkSchema>;
 
+export const QuestionMessageSchema = z.object({
+  author: z.string(),
+  at: z.string(),
+  body: z.string(),
+  /** a human's pick among the standard answers; plain follow-ups omit it */
+  choice: z.enum(['withdraw', 'keep']).optional(),
+});
+export type QuestionMessage = z.infer<typeof QuestionMessageSchema>;
+
 export const QuestionSchema = z.object({
   id: z.string(),
-  node: z.string(),
-  node_hash: Hash,
+  /** anchor node; '' = top-level (its node was removed with no surviving ancestor) */
+  node: z.string().default(''),
+  node_hash: Hash.optional(),
   dispatch: z.string(),
   kind: z.enum(['ambiguity', 'contradiction', 'reconcile', 'rename', 'split']),
   text: z.string(),
   options: z.array(z.string()).optional(),
   state: z.enum(['open', 'addressed', 'resolved', 'withdrawn']),
   answer: z.string().nullable().default(null),
+  /** issue whose dispatch this question gates (outbox entries targeting it stay queued while open) */
+  issue: z.number().int().positive().optional(),
+  /** Q&A thread: human answers and agent follow-ups, oldest first */
+  thread: z.array(QuestionMessageSchema).default([]),
 });
 export const QuestionsSchema = z.array(QuestionSchema);
 export type Question = z.infer<typeof QuestionSchema>;

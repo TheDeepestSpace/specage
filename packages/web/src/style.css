@@ -599,3 +599,37 @@ body .cm-tooltip.cm-tooltip-autocomplete {
   margin: 0.25rem 0;
   font: inherit;
 }
+
+/* ---- planner questions ---- */
+.q-badge {
+  display: inline-block;
+  min-width: 1.2em;
+  border-radius: 999px;
+  background: #e8890c;
+  color: #fff;
+  font-size: 0.7rem;
+  font-weight: 700;
+  line-height: 1.3em;
+  text-align: center;
+  cursor: pointer;
+}
+.q-thread {
+  border-left-color: #e8890c;
+}
+.q-thread.q-resolved,
+.q-thread.q-withdrawn {
+  border-left-color: var(--c-verified, #3a3);
+  opacity: 0.8;
+}
+.q-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin: 0.3rem 0;
+}
+.q-thread textarea {
+  width: 100%;
+  box-sizing: border-box;
+  margin: 0.25rem 0;
+  font: inherit;
+}

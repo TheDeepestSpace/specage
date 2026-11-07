@@ -1,6 +1,18 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { parse, lint, diff, flatten, normalize, sha12 } from '../src/index.js';
+import {
+  parse,
+  lint,
+  diff,
+  flatten,
+  normalize,
+  sha12,
+  anchorQuestion,
+  answerQuestion,
+  dispatchBlocked,
+  QuestionSchema,
+  QuestionError,
+} from '../src/index.js';
 
 const fixture = readFileSync(
   new URL('../../../fixtures/tbgwaf/tbgwaf.specage', import.meta.url),
@@ -338,5 +350,69 @@ describe('comment threads', () => {
     ]);
     expect(m[0].comments.at(-1)).toMatchObject({ author: 'agent', body: 'done' });
     expect(m[0]).toMatchObject({ state: 'resolved', resolved_by: 'agent' });
+  });
+});
+
+describe('planner questions', () => {
+  const q = (o: object) =>
+    QuestionSchema.parse({
+      id: 'q-1',
+      node: 'a',
+      dispatch: 'd',
+      kind: 'reconcile',
+      text: 'drop it?',
+      state: 'open',
+      ...o,
+    });
+  it('anchors to the nearest surviving ancestor; removed root is top-level', () => {
+    const old = parse('Top @a { Mid @a.b { Leaf @a.b.c; }; Other @a.o; }; Lone @z;');
+    const gone = (ids: string[]) =>
+      anchorQuestion(old, parse(`${ids.map((i) => `N @${i};`).join(' ')}`), 'a.b.c');
+    // parent a.b survives -> a.b
+    expect(gone(['a', 'a.b']).node).toBe('a.b');
+    // a.b removed too -> grandparent a
+    const r = gone(['a']);
+    expect(r.node).toBe('a');
+    expect(r.node_hash).toMatch(/^[0-9a-f]{12}$/);
+    // whole branch removed -> top-level
+    expect(gone(['z']).node).toBe('');
+    // removed root node -> top-level
+    expect(anchorQuestion(old, parse('Lone2 @y;'), 'z')).toEqual({ node: '' });
+  });
+  it('answers append to the thread, keep the question open, and validate input', () => {
+    const at = '2026-11-01T00:00:00Z';
+    const one = answerQuestion([q({})], { id: 'q-1', choice: 'keep' }, 'me', at);
+    expect(one[0].state).toBe('open');
+    expect(one[0].thread).toEqual([{ author: 'me', at, body: 'Keep the issue.', choice: 'keep' }]);
+    const two = answerQuestion(one, { id: 'q-1', body: 'but rename it' }, 'me', at);
+    expect(two[0].thread).toHaveLength(2);
+    expect(two[0].answer).toBe('but rename it');
+    expect(() => answerQuestion(one, { id: 'nope', body: 'x' }, 'me', at)).toThrow(QuestionError);
+    expect(() => answerQuestion(one, { id: 'q-1' }, 'me', at)).toThrow(QuestionError);
+    expect(() =>
+      answerQuestion([q({ state: 'resolved' })], { id: 'q-1', body: 'x' }, 'me', at),
+    ).toThrow(/resolved/);
+  });
+  it('gates dispatch only while a question for that issue is open', () => {
+    const qs = [q({ issue: 7 }), q({ id: 'q-2', issue: 8, state: 'resolved' }), q({ id: 'q-3' })];
+    expect(dispatchBlocked(qs, 7)).toBe(true);
+    expect(dispatchBlocked(qs, 8)).toBe(false);
+    expect(dispatchBlocked(qs, 9)).toBe(false);
+  });
+  it('accepts legacy questions without thread/issue and top-level ones without node', () => {
+    const legacy = QuestionSchema.parse({
+      id: 'q',
+      node: 'x',
+      node_hash: '7de5de6b1450',
+      dispatch: 'd',
+      kind: 'rename',
+      text: 't',
+      state: 'open',
+    });
+    expect(legacy.thread).toEqual([]);
+    expect(
+      QuestionSchema.parse({ id: 'q', dispatch: 'd', kind: 'split', text: 't', state: 'open' })
+        .node,
+    ).toBe('');
   });
 });

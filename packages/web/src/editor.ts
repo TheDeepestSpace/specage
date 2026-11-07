@@ -43,6 +43,7 @@ import { conflictDialog } from './conflict.js';
 import { h, store } from './dom.js';
 import grammarSrc from '../../../protocol/GRAMMAR.md?raw';
 import { renderMarkdown } from './markdown.js';
+import { openFor } from './questions.js';
 import { renderPane } from './tracepane.js';
 import { openCount } from './threads.js';
 import { aggregateText } from './viewer.js';
@@ -148,6 +149,42 @@ export async function renderEditor(root: HTMLElement, repo: string) {
       return c ? new Bubble(c) : null;
     },
     lineMarkerChange: (u) => u.transactions.some((t) => t.effects.some((e) => e.is(setState))),
+  });
+
+  class QBadge extends GutterMarker {
+    constructor(readonly n: number) {
+      super();
+    }
+    eq(o: QBadge) {
+      return o.n === this.n;
+    }
+    toDOM() {
+      const s = document.createElement('span');
+      s.className = 'q-badge';
+      s.dataset.count = String(this.n);
+      s.title = `${this.n} open question${this.n > 1 ? 's' : ''}`;
+      s.textContent = '?';
+      return s;
+    }
+  }
+  // orange `?` right of the status circle; clicking selects the node so the side panel opens its questions
+  const questionGutter = gutter({
+    class: 'cm-question-gutter',
+    lineMarker(view, line) {
+      const a = view.state.field(analysisField);
+      const n = a.byLine.get(view.state.doc.lineAt(line.from).number);
+      const c = n && n.id ? openFor(state.questions, n.id).length : 0;
+      return c ? new QBadge(c) : null;
+    },
+    lineMarkerChange: (u) => u.transactions.some((t) => t.effects.some((e) => e.is(setState))),
+    domEventHandlers: {
+      click(view, line) {
+        view.dispatch({ selection: { anchor: line.from } });
+        paneUpdate();
+        paneEl.querySelector('#node-questions')?.scrollIntoView({ block: 'nearest' });
+        return true;
+      },
+    },
   });
 
   const foldBySpec = foldService.of((st, from, to) => {
@@ -423,6 +460,11 @@ export async function renderEditor(root: HTMLElement, repo: string) {
           view.dispatch({ effects: setState.of(null) });
           paneUpdate();
         },
+        onQuestions(q) {
+          state = { ...state, questions: q };
+          view.dispatch({ effects: setState.of(null) });
+          paneUpdate();
+        },
         goto(t) {
           const line = view.state.doc.line(Math.min(t.line, view.state.doc.lines));
           view.dispatch({ selection: { anchor: line.from }, scrollIntoView: true });
@@ -481,6 +523,7 @@ export async function renderEditor(root: HTMLElement, repo: string) {
         analysisField,
         lineNumbers(),
         statusGutter,
+        questionGutter,
         commentGutter,
         foldGutter(),
         foldBySpec,

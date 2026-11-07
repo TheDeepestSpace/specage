@@ -321,6 +321,33 @@ describe('API', () => {
     );
     expect(noCsrf.status).toBe(403);
   });
+  it('questions: answers append to the thread on the trail branch; question stays open', async () => {
+    const h = harness();
+    await h.signup(auth());
+    const key = 'specages/r/trail:questions.yaml';
+    h.github.files[key] =
+      '- {id: q-1, node: "", dispatch: d, kind: reconcile, text: "drop it?", state: open, issue: 7}\n';
+    const post = (b: unknown) => h.req('POST', '/api/r/o/r/questions', b);
+    expect((await post({ id: 'q-1', choice: 'keep', body: 'still needed' })).status).toBe(200);
+    expect(h.github.lastMessage).toBe('questions: answer q-1');
+    expect((await post({ id: 'q-1', body: 'and rename' })).status).toBe(200);
+    expect((await post({ id: 'nope', body: 'x' })).status).toBe(400);
+    expect((await post({ id: 'q-1' })).status).toBe(400);
+    expect((await post({ id: 'q-1', choice: 'bogus' })).status).toBe(400);
+    const st = (await (await h.req('GET', '/api/r/o/r/state')).json()) as any;
+    expect(st.questions[0]).toMatchObject({ state: 'open', issue: 7, node: '' });
+    expect(st.questions[0].thread.map((m: any) => m.body)).toEqual(['still needed', 'and rename']);
+    expect(st.questions[0].thread[0].choice).toBe('keep');
+    h.github.files[key] = h.github.files[key].replace('state: open', 'state: resolved');
+    expect((await post({ id: 'q-1', body: 'late' })).status).toBe(400);
+    const noCsrf = await h.req(
+      'POST',
+      '/api/r/o/r/questions',
+      { id: 'q-1', body: 'x' },
+      { 'x-specage': '' },
+    );
+    expect(noCsrf.status).toBe(403);
+  });
   it('a save commits to the spec branch and leaves the cursor alone', async () => {
     const h = harness();
     await h.signup(auth());
