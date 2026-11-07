@@ -371,6 +371,7 @@ describe('dispatch_agent', () => {
     state: 'open',
     merged: false,
     body: 'Closes #7',
+    branch: 'specage/shoot-burst',
     commits: ['feat\n\nSpec: shoot.burst@aaaaaaaaaaaa\nSpec: shoot.cap@bbbbbbbbbbbb'],
     ...o,
   });
@@ -427,6 +428,12 @@ describe('dispatch_agent', () => {
     expect(verifyPr({ ...c, body: 'Spec-Release: shoot.cap' }, ctx, 7)).toEqual([
       'PR body must say "Closes #7"',
     ]);
+  });
+  it('rejects a PR branch not named specage/<name>', () => {
+    expect(verifyPr(pr({ branch: 'fix-things' }), ctx, 7)).toEqual([
+      'PR branch "fix-things" must be named specage/<name>',
+    ]);
+    expect(verifyPr(pr(), ctx, 7)).toEqual([]);
   });
   it('retries below the cap, gives up at it', () => {
     const bad = pr({ commits: ['no trailers'] });

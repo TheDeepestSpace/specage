@@ -313,6 +313,7 @@ function prFacts(repo: string, n: number): PrFacts {
     state: pr.state,
     merged: !!pr.merged,
     body: pr.body ?? '',
+    branch: pr.head?.ref ?? '',
     commits: commits.map((c: any) => c.commit.message as string),
   };
 }
