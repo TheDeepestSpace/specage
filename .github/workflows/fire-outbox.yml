@@ -27,6 +27,7 @@ jobs:
       - name: Validate inputs
         run: |
           [[ "$REPO" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] || { echo "bad repo"; exit 1; }
+          [[ "${REPO,,}" != "${DATA_REPO,,}" ]] || { echo "repo must be the project code repo, not the data repo ($DATA_REPO)"; exit 1; }
           [[ "$SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "bad sha"; exit 1; }
           [[ "$PROJECT" =~ ^[A-Za-z0-9_.-]+$ ]] || { echo "bad project"; exit 1; }
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
