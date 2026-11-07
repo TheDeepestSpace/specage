@@ -27,7 +27,6 @@ jobs:
       - name: Validate inputs
         run: |
           [[ "$REPO" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] || { echo "bad repo"; exit 1; }
-          [[ "${REPO,,}" != "${DATA_REPO,,}" ]] || { echo "repo must be the project code repo, not the data repo ($DATA_REPO)"; exit 1; }
           [[ "$SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "bad sha"; exit 1; }
           [[ "$PROJECT" =~ ^[A-Za-z0-9_.-]+$ ]] || { echo "bad project"; exit 1; }
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -51,6 +50,13 @@ jobs:
           git fetch --quiet origin "specages/$PROJECT/trail"
           git merge-base --is-ancestor "$SHA" FETCH_HEAD || { echo "sha is not on the trail branch"; exit 1; }
           git checkout --quiet -B "specages/$PROJECT/trail" "$SHA"
+          # The relay passes the pushed repo (the data repo); the project's code repo comes from
+          # the spec branch's config.yaml, never from the input.
+          git fetch --quiet origin "specages/$PROJECT/spec"
+          CODE_REPO=$(git show FETCH_HEAD:.specage/config.yaml | sed -n 's/^repo:[[:space:]]*//p' | head -1 | tr -d "\"' \r")
+          [[ "$CODE_REPO" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] || { echo "bad code repo in config.yaml"; exit 1; }
+          [[ "${CODE_REPO,,}" != "${DATA_REPO,,}" ]] || { echo "code repo must not be the data repo"; exit 1; }
+          echo "REPO=$CODE_REPO" >> "$GITHUB_ENV"
       - name: Fire unfired entries
         env: {GH_TOKEN: '${{ steps.app.outputs.token }}'}
         run: |
