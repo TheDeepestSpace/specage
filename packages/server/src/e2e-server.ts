@@ -41,7 +41,7 @@ gh.files['specages/r/trail:questions.yaml'] = `- id: q-0001
   dispatch: dispatch/r/2026-10-30T02-11Z
   kind: reconcile
   text: "Node shoot.reload was removed with no surviving ancestor. Withdraw issue #8?"
-  options: ["withdraw", "keep"]
+  options: ["yes: carry trace/claims, retire \`s-43c9243d\`", "no: keep it"]
   state: open
   answer: null
   issue: 8

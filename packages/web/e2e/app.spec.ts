@@ -295,10 +295,19 @@ test('questions: clicking the badge opens the node thread; answer, follow-up, re
   expect(st.questions.find((x: any) => x.id === 'q-0002').thread).toEqual([]);
 });
 
+test('questions: clicking an option with a colon and backticks is accepted', async () => {
+  const q = page.locator('#top-questions [data-question="q-0002"]');
+  await q.getByRole('button', { name: /^yes: carry trace\/claims/ }).click();
+  await expect(q.locator('.q-msg').first()).toContainText('retire `s-43c9243d`');
+  await expect(q.locator('.error')).toHaveText('');
+  await expect(q).toHaveClass(/q-open/);
+  await shot('questions-option-answered');
+});
+
 test('questions: top-level question can be withdrawn from the panel', async () => {
   const q = page.locator('#top-questions [data-question="q-0002"]');
   await q.getByRole('button', { name: 'Withdraw', exact: true }).click();
-  await expect(q.locator('.q-msg').first()).toContainText('Withdraw the issue.');
-  await expect(q.locator('.q-msg').first()).toContainText('withdraw');
+  await expect(q.locator('.q-msg').last()).toContainText('Withdraw the issue.');
+  await expect(q.locator('.q-msg').last()).toContainText('withdraw');
   await shot('questions-top-level-answered');
 });

@@ -115,7 +115,7 @@ export const ALLOWED: { method: string; auth: 'jwt' | 'install'; re: RegExp }[] 
   {
     method: 'PATCH',
     auth: 'install',
-    re: new RegExp(`^/repos/${SEG}/${SEG}/git/refs/heads/specages/${SEG}/spec$`),
+    re: new RegExp(`^/repos/${SEG}/${SEG}/git/refs/heads/specages/${SEG}/(spec|trail)$`),
   },
   { method: 'POST', auth: 'install', re: new RegExp(`^/repos/${SEG}/${SEG}/git/refs$`) },
   {

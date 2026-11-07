@@ -531,6 +531,13 @@ export function createApp({ env, db, github, now = Date.now }: Deps) {
     return c.json({ error: 'conflict, try again' }, 409);
   });
 
+  // An unexpected storage failure: log the real error, tell the user it is upstream (502), not a bug in their request.
+  const githubFailure = (c: Context, e: unknown, action: string, target: string) => {
+    console.error(`${action} ${target}: ${e instanceof Error ? e.message : String(e)}`);
+    db.audit(action, target, '502');
+    return c.json({ error: 'could not save to the data repo (GitHub error), try again' }, 502);
+  };
+
   // Planner questions: a human answer or follow-up is appended to the question's thread in
   // questions.yaml on the trail branch. The question stays open until the planner resolves it, and
   // the trail push makes the next planner run apply the answer.
@@ -542,11 +549,18 @@ export function createApp({ env, db, github, now = Date.now }: Deps) {
     if (!op || typeof op.id !== 'string') return c.json({ error: 'bad op' }, 400);
     if (op.choice !== undefined && op.choice !== 'withdraw' && op.choice !== 'keep')
       return c.json({ error: 'bad choice' }, 400);
-    const body = typeof op.body === 'string' ? op.body : undefined;
+    if (op.body !== undefined && typeof op.body !== 'string')
+      return c.json({ error: 'body must be text' }, 400);
+    const body: string | undefined = op.body;
     const author = db.cred(sess(c).cid)?.label ?? 'owner';
     for (let attempt = 0; attempt < 3; attempt++) {
-      const text = await github.getFile('questions.yaml', trailBranch(repo));
-      const cur = QuestionsSchema.safeParse((text === null ? undefined : parseYaml(text)) ?? []);
+      let cur;
+      try {
+        const text = await github.getFile('questions.yaml', trailBranch(repo));
+        cur = QuestionsSchema.safeParse((text === null ? undefined : parseYaml(text)) ?? []);
+      } catch (e) {
+        return githubFailure(c, e, 'question', `${owner}/${repo}`);
+      }
       if (!cur.success) return c.json({ error: 'questions.yaml is invalid' }, 422);
       let next;
       try {
@@ -570,7 +584,7 @@ export function createApp({ env, db, github, now = Date.now }: Deps) {
         return c.json({ questions: next });
       } catch (e) {
         if (e instanceof NotFound) return c.json({ error: 'trail branch not found' }, 404);
-        if (!(e instanceof Conflict)) throw e;
+        if (!(e instanceof Conflict)) return githubFailure(c, e, 'question', `${owner}/${repo}`);
       }
     }
     db.audit('question', `${owner}/${repo}`, '409');
