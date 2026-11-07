@@ -157,7 +157,7 @@ export function cmdState(a: Args): number {
   if (sub === 'validate') {
     const dir = a._[2];
     if (!dir) throw new CliError('usage: specage state validate <dir>');
-    const { issues } = loadState(dir);
+    const { state, issues } = loadState(dir);
     const dirOutbox = join(dir, 'outbox');
     for (const f of listFiles(dirOutbox).filter((f) => f.endsWith('.json'))) {
       const r = OutboxSchema.safeParse(JSON.parse(readFileSync(join(dirOutbox, f), 'utf8')));
@@ -165,6 +165,18 @@ export function cmdState(a: Args): number {
         issues.push({
           file: `outbox/${f}`,
           message: r.error.issues.map((i) => i.message).join('; '),
+        });
+    }
+    // a withdrawn item must not keep an unfired outbox entry (it would implement a retired node)
+    const withdrawn = new Set(
+      state.work.items.filter((w) => w.state === 'withdrawn' && w.issue).map((w) => w.issue),
+    );
+    for (const f of listFiles(dirOutbox).filter((f) => f.endsWith('.json'))) {
+      const e = OutboxSchema.safeParse(JSON.parse(readFileSync(join(dirOutbox, f), 'utf8')));
+      if (e.success && !e.data.fired && withdrawn.has(e.data.target))
+        issues.push({
+          file: `outbox/${f}`,
+          message: `unfired entry targets withdrawn issue #${e.data.target}; delete it`,
         });
     }
     issues.forEach((i) => out(`${i.file}: ${i.message}`));

@@ -143,6 +143,24 @@ describe('state', () => {
     expect(run(['state', 'validate', d]).code).toBe(0);
     expect(run(['state', 'validate', join(root, 'fixtures/tbgwaf/state')]).code).toBe(0);
   });
+  it('validate rejects an unfired outbox entry for a withdrawn issue', () => {
+    const d = tmp();
+    mkdirSync(join(d, 'outbox'));
+    writeFileSync(
+      join(d, 'work.yaml'),
+      'items:\n  - {id: w1, issue: 4, state: withdrawn, reason: node removed}\n',
+    );
+    const e = (extra: string) =>
+      `{"id":"o","kind":"implement","target":4,"body":"","created":"x"${extra}}`;
+    writeFileSync(join(d, 'outbox/o.json'), e(''));
+    const bad = run(['state', 'validate', d]);
+    expect(bad.code).toBe(1);
+    expect(bad.out).toContain('withdrawn issue #4');
+    writeFileSync(join(d, 'outbox/o.json'), e(',"fired":"2026-01-01"'));
+    expect(run(['state', 'validate', d]).code).toBe(0);
+    execFileSync('rm', [join(d, 'outbox/o.json')]);
+    expect(run(['state', 'validate', d]).code).toBe(0);
+  });
   it('commit rebases onto the latest trail and pushes to the checked-out branch', () => {
     const trail = 'specages/r/trail';
     const base = tmp();

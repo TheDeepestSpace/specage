@@ -72,7 +72,18 @@ export const WorkItemSchema = z.object({
   id: z.string(),
   issue: z.number().nullable().default(null),
   pr: z.number().nullable().default(null),
-  state: z.enum(['filed', 'in_progress', 'in_review', 'merged', 'closed', 'failed', 'needs_human']),
+  state: z.enum([
+    'filed',
+    'in_progress',
+    'in_review',
+    'merged',
+    'closed',
+    'withdrawn',
+    'failed',
+    'needs_human',
+  ]),
+  /** why the planner last changed this item's state or issue (reconcile: updated / withdrawn / reopened) */
+  reason: z.string().optional(),
   relations: z
     .array(
       z.union([

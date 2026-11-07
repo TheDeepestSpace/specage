@@ -12,7 +12,7 @@ Run the CLI with `npx --yes github:TheDeepestSpace/specage#v0 <cmd>` (call it `s
 1. Clone the data repo named in the dispatch message: `git clone --branch specages/<project>/spec <data_repo>` then `git fetch origin specages/<project>/trail --tags`. Read `.specage/config.yaml`, `.specage/policy.yaml` and `GRAMMAR.md` from the spec branch. Check out the trail branch in a separate worktree with exactly `git worktree add -b specages/<project>/trail ../trail origin/specages/<project>/trail` (or, if the local branch exists, `git worktree add ../trail specages/<project>/trail`). Never create the trail checkout from a fresh `git init`, from the data repo's default branch, or with `--orphan`: it must descend from `origin/specages/<project>/trail`, and `git log` there must show the previous dispatch commits. Run `specage state commit` from that worktree, and if the push is not a fast-forward, `git pull --rebase` and retry; never force-push. The project's code repo is `repo` in the config; issues and PRs are filed there.
 2. **Cursor.** The cursor is the last spec commit already dispatched, stored in the data repo as the ref `refs/specage/dispatched/<project>` (not a branch). `<sha>` is the commit named in the dispatch message. Fetch it: `git fetch origin refs/specage/dispatched/<project>:refs/specage/dispatched/<project>` (if the ref does not exist, this is the first dispatch: diff from empty). Then: `specage diff --from <cursor> --to <sha> --spec-file <spec_file> --project <project> --json`. If `entries` is empty (e.g. a comment-only edit), skip steps 4-5 but still run step 3 (Sync) and steps 6-7. Never stop early: Sync runs on every dispatch.
 3. **Sync (always runs, even with no spec changes).** Scan PRs merged since the last sync (not just since the spec cursor; use `gh pr list --state merged` on the code repo and skip PRs already recorded as `pr` evidence) for `Spec: <id>@<hash>` commit trailers or PR-body lines. Mark those claims `done`, set the work item to `merged`, add `pr` evidence to the trace.
-4. **Reconcile** every entry (ladder below).
+4. **Reconcile** every entry (ladder below), then **Reconcile existing issues** (section below).
 5. **Group** gaps into work items and file issues.
 6. Write `trace.yaml`, `work.yaml`, `questions.yaml`, `thread-events.yaml` (if you replied to or resolved threads), `dispatches/<tag>.md` and any `outbox/` entries. Run `specage state validate`, then `specage state commit -m "dispatch <tag>"`. One commit per session.
 7. Post the report where the dispatch was started (a dispatch from the-intern may carry no repo, issue or PR; then there is nothing to post to, and `dispatches/<tag>.md` is the report), then **advance the cursor** only after everything above succeeded: `git push origin <sha>:refs/specage/dispatched/<project>` (create it if missing; fast-forward only, never force). If the session fails earlier, leave the cursor so the next dispatch re-diffs the same changes. The specage server never moves the cursor.
@@ -30,7 +30,7 @@ Stop at the first rung that applies.
    - partial: file an issue for the gap only, linking existing evidence.
    - contradicts: open a **question**, not an issue.
    - absent: file an issue.
-6. **removed**: first, if the removal pairs with an added node that has a derived name (ID-less statements get a new name when reworded), compare old and new text. If the meaning is unchanged, treat it as cosmetic (rung 3): no action, and carry the old trace entry, evidence and claims over to the new derived name. If it changed, handle the pair as removed + added. Otherwise, if in-flight work exists, ask. Otherwise retire the ID and note whether code for it still exists. Never delete code unprompted.
+6. **removed**: first, if the removal pairs with an added node that has a derived name (ID-less statements get a new name when reworded), compare old and new text. If the meaning is unchanged, treat it as cosmetic (rung 3): no action, and carry the old trace entry, evidence and claims over to the new derived name. If it changed, handle the pair as removed + added. Otherwise, if in-flight work exists, ask. Otherwise retire the ID, reconcile its undispatched or closed issues (see Reconcile existing issues) and note whether code for it still exists. Never delete code unprompted.
 7. **suspected_rename**: ask (question kind `rename`).
 
 Skip nodes marked `?` (open question) and `>later:`; list them in the report only.
@@ -40,6 +40,18 @@ Discovery is biased toward "implemented", so be strict:
 - Evidence tiers: `tested` (a test/scenario asserts it), `located` (code found, nothing asserts it), `asserted` (you believe it, can't point to anything). Report `asserted` separately.
 - `located`-only nodes go in the report as test-gap candidates; they don't become issues.
 - Pin every evidence ref to a commit SHA. Never link a branch name.
+
+## Reconcile existing issues
+
+For every changed, removed or reversed node, look at the issues you previously filed for it (work items in `work.yaml`). Act by state; every action is idempotent (check the current issue and work state first, and do nothing if it already matches) and writes the work item's `state` plus a short `reason` to the trail.
+
+- **Undispatched** (`filed`, no PR, outbox entry absent or without `fired`):
+  - still relevant but changed: edit the issue title and generated Spec section to the current text and hashes (`gh issue edit`), refresh the unfired outbox entry's `spec_ids`, keep state `filed`, `reason: updated <id>@<hash>`.
+  - removed, reversed or superseded: close the issue with a comment saying why (`gh issue close --reason "not planned" --comment ...`), delete its unfired outbox file, set state `withdrawn`, `reason: <why>`.
+- **Closed** issues you filed (the work item is `closed` or `withdrawn`, or the issue is closed without a merged PR): if the spec requires the node again, or changed so the closure is stale, reopen it (`gh issue reopen`), update it as above, set state `filed`, `reason: reopened <id>@<hash>`, and write a new `implement` outbox entry if `auto_implement` applies. Never reopen an issue closed because its PR merged and still satisfies the spec (state `merged`; the discovery rung decides if a gap remains, and then files a new issue). A `withdrawn` item whose node is unchanged since the withdrawal stays withdrawn.
+- **In flight** (PR open, `in_progress`, `in_review`): do not close or edit; keep the ladder behaviour (amend / ask per `policy.yaml`).
+
+A fired outbox entry is never edited or deleted. `specage state validate` fails if a `withdrawn` item still has an unfired outbox entry.
 
 ## Actions
 
