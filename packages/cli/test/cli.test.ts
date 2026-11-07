@@ -186,6 +186,40 @@ describe('state', () => {
 });
 
 describe('outbox fire', () => {
+  it('targets the project repo and refuses the data repo', () => {
+    const d = tmp();
+    mkdirSync(join(d, 'outbox'));
+    writeFileSync(
+      join(d, 'outbox/o1.json'),
+      JSON.stringify({
+        id: 'o1',
+        kind: 'implement',
+        target: 15,
+        body: 'x',
+        created: '2026-10-30T02:15:11Z',
+      }),
+    );
+    const base = [
+      'outbox',
+      'fire',
+      '--unfired',
+      '--intern',
+      'o/the-intern',
+      '--project',
+      'r',
+      '--data-repo',
+      'o/data',
+      '--cwd',
+      d,
+      '--dry-run',
+    ];
+    const ok = run([...base, '--repo', 'o/calc']);
+    expect(ok.code).toBe(0);
+    expect(ok.out).toContain('\\"repo\\":\\"o/calc\\"');
+    const bad = run([...base, '--repo', 'O/Data']);
+    expect(bad.code).not.toBe(0);
+    expect(bad.out + bad.err).toContain('data repo');
+  });
   it('fires only entries ADDED in the range, via workflow_dispatch', () => {
     const d = tmp();
     git(d, 'init', '-q');

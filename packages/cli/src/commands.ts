@@ -241,6 +241,10 @@ export function cmdOutbox(a: Args): number {
   const dataRepo = str(a, 'data-repo');
   const specageRepo = str(a, 'specage-repo') ?? 'TheDeepestSpace/specage';
   if (!project || !dataRepo) throw new CliError('outbox fire needs --project and --data-repo');
+  if (!/^[\w.-]+\/[\w.-]+$/.test(repo))
+    throw new CliError(`--repo must be owner/repo, got "${repo}"`);
+  if (repo.toLowerCase() === dataRepo.toLowerCase())
+    throw new CliError(`--repo equals the data repo (${dataRepo}); refusing to dispatch there`);
   const b = range?.split('..')[1];
   let failed = 0;
   // --unfired: every outbox/*.json in the working tree without a `fired` mark (idempotent; marks are written back)
