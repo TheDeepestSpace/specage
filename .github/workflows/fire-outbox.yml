@@ -38,7 +38,7 @@ jobs:
       - id: app
         uses: actions/create-github-app-token@v2
         with:
-          app-id: ${{ vars.SPECAGE_APP_ID }}
+          app-id: ${{ secrets.SPECAGE_APP_ID }}
           private-key: ${{ secrets.SPECAGE_APP_PRIVATE_KEY }}
           owner: ${{ github.repository_owner }}
       - name: Check out the trail at sha
