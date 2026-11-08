@@ -17,6 +17,8 @@ import {
   dispatchBlocked,
   QuestionSchema,
   QuestionError,
+  buildIssueBody,
+  buildPlannerDispatch,
 } from '../src/index.js';
 
 const fixture = readFileSync(
@@ -483,6 +485,52 @@ describe('reconcile helpers', () => {
     expect(run({}, [], [mk('q', 'z', { issue: 1, state: 'resolved' })])).toHaveLength(1);
     expect(run({ claims: { z: { hash: 'bbbbbbbbbbbb', status: 'pending' } } })).toEqual([]);
     expect(run({ claims: { nope: { hash: hashes.z, status: 'pending' } } })).toEqual([]);
+  });
+});
+
+describe('enriched issue body', () => {
+  const base = {
+    summary: 'Do the thing',
+    spec_commit: 'a'.repeat(40),
+    claims: [{ id: 'x.y', hash: 'abc123def456', text: 'The system MUST do\nthe thing.' }],
+  };
+  it('quotes spec verbatim and keeps trailer instructions', () => {
+    const b = buildIssueBody(base);
+    expect(b).toContain('  > The system MUST do\n  > the thing.');
+    expect(b).toContain('`x.y@abc123def456`');
+    expect(b).toContain('Add `Spec: x.y@abc123def456`');
+    expect(b).toContain('Tests required');
+  });
+  it('renders enrichment, bounded, with UI screenshots', () => {
+    const b = buildIssueBody({
+      ...base,
+      binding: [{ id: 'c.1', kind: 'constraint', text: 'No deps' }],
+      enrichment: {
+        files: Array.from({ length: 20 }, (_, i) => `f${i}.ts`),
+        criteria: ['z'.repeat(1000)],
+        ui: true,
+      },
+    });
+    expect(b).toContain('`c.1` (constraint): No deps');
+    expect(b).toContain('- f7.ts');
+    expect(b).not.toContain('f8.ts');
+    expect(b).toContain('…');
+    expect(b).toContain('screenshots');
+  });
+  it('rejects empty claims', () => {
+    expect(() => buildIssueBody({ ...base, claims: [] })).toThrow();
+  });
+  it('planner dispatch grants read on the code repo', () => {
+    const d: any = buildPlannerDispatch({
+      repo: 'o/code',
+      data_repo: 'o/data',
+      specage_repo: 'o/specage',
+      prompt_ref: 'main',
+      project: 'p',
+      before: null,
+      after: 'b'.repeat(40),
+    });
+    expect(d.access).toContainEqual({ repo: 'o/code', scope: 'read' });
   });
 });
 
