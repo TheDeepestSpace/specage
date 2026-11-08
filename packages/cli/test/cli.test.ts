@@ -630,3 +630,24 @@ describe('plan undispatched / question reanchor / state validate --spec', () => 
     expect(run(['plan', 'undispatched', d, '--spec', spec]).out).toContain('nothing undispatched');
   });
 });
+
+describe('threads pending', () => {
+  it('lists unanswered threads and drops answered ones', () => {
+    const d = tmp();
+    const sp = tmp();
+    writeFileSync(
+      join(sp, 'comments.yaml'),
+      'threads:\n  - {id: t-0001, node: a, node_hash: abcdef012345, state: open, comments: [{id: t-0001.1, author: me, at: "2026-01-01T00:00:00Z", body: why}]}\n',
+    );
+    const r = run(['threads', 'pending', d, '--spec-dir', sp]);
+    expect(r.code).toBe(0);
+    expect(r.out).toContain('t-0001 on a: me: why');
+    writeFileSync(
+      join(d, 'thread-events.yaml'),
+      '- {thread: t-0001, kind: reply, author: the-intern, at: "2026-01-02T00:00:00Z", body: because}\n',
+    );
+    expect(run(['threads', 'pending', d, '--spec-dir', sp]).out).toContain(
+      'no threads need a reply',
+    );
+  });
+});

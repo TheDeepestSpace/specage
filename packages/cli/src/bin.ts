@@ -8,6 +8,7 @@ import {
   cmdLint,
   cmdOutbox,
   cmdPlan,
+  cmdThreads,
   cmdParse,
   cmdQuestion,
   cmdRender,
@@ -23,6 +24,7 @@ const HELP = `specage <command>
   state validate <dir> [--spec <file|ref>] | state commit -m <msg> [--dir <checkout>]
   question anchor <removed-id> --from <ref|file> --to <ref|file>   (prints {node,node_hash?}; node '' = top-level)
   question reanchor <trail dir> --spec <file|ref> [--from <old>] [--write]   (re-tie questions whose node is gone)
+  threads pending <trail dir> --spec-dir <spec checkout> [--json]   (open threads awaiting an agent reply)
   plan undispatched <trail dir> --spec <file|ref> [--write]   (enqueue implement entries for filed, never-dispatched issues)
   cursor [--tag <dispatch tag>] [--project <name>]
   outbox fire (--range <a>..<b> | --unfired --cwd <trail checkout>) --repo <o/r> --intern <o/r> --project <p> --data-repo <o/r> [--specage-repo <o/r>] [--dry-run]
@@ -53,6 +55,8 @@ async function main(): Promise<number> {
       return cmdQuestion(a);
     case 'plan':
       return cmdPlan(a);
+    case 'threads':
+      return cmdThreads(a);
     case 'cursor':
       return cmdCursor(a);
     case 'outbox':

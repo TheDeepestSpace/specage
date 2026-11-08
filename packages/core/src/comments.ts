@@ -85,3 +85,20 @@ export function mergeThreads(threads: Thread[], events: ThreadEvent[] = []): Thr
   }
   return out;
 }
+
+export const AGENT_AUTHOR = 'the-intern';
+
+/**
+ * Open threads that still need an agent reply: after folding in agent events, the last comment is not
+ * from the agent. Answered threads drop out, so re-running a dispatch never re-answers (idempotent).
+ */
+export function pendingThreads(
+  threads: Thread[],
+  events: ThreadEvent[] = [],
+  agent = AGENT_AUTHOR,
+): Thread[] {
+  return mergeThreads(threads, events).filter((t) => {
+    const last = t.comments[t.comments.length - 1];
+    return t.state === 'open' && !!last && last.author !== agent;
+  });
+}
