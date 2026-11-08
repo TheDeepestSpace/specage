@@ -88,7 +88,9 @@ For sessions dispatched to review an implement PR (the dispatch message names th
 - Check the PR against the spec, not just the code: every claimed statement (`Spec: <id>@<hash>` trailers and the issue's generated Spec section) must be implemented at the claimed hash and covered by tests; `Spec-Release: <id>` lines excuse a claim only when the PR body says why; the trace and work items on the trail branch must stay consistent with what the PR actually does.
 - Submit the verdict with `gh pr review --approve` or `--request-changes`, with a short body listing findings. GitHub rejects approving or requesting changes on the bot's own PR; fall back to `gh pr review --comment` whose first line is `APPROVE` or `CHANGES REQUESTED`.
 - When you request changes, also post a PR comment that starts with `@the-intern-bot` followed by the findings to fix. That mention has no data-repo access, so list the exact `id@hash` claims affected.
-- Never push to the PR branch, never merge, and never push to the review branch yourself. The human owner stays the final merger: on APPROVE, stop; the owner merges by hand.
+- Never push to the PR branch or the review branch yourself.
+- On APPROVE (after posting the verdict above, which stays as is, including the `APPROVE` first-line comment fallback), also merge the PR: `gh pr merge <number> --squash --delete-branch --match-head-commit <reviewed-head-sha>` (or the repo's configured method). Merge only when the verdict is APPROVE, no required check is failing or pending (no checks is fine), the PR is not a draft, and the PR head is still the SHA you reviewed. Never merge on request-changes.
+- If the merge fails (permissions, branch protection, conflicts, moved head), say so in a PR comment and stop; do not retry or force.
 - Ignore your own earlier reviews as evidence that anything works.
 
 ## Comment threads
