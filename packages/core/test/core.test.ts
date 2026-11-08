@@ -8,6 +8,10 @@ import {
   normalize,
   sha12,
   anchorQuestion,
+  orphanedQuestions,
+  reanchorQuestions,
+  undispatchedItems,
+  implementEntry,
   answerQuestion,
   dispatchBlocked,
   QuestionSchema,
@@ -414,5 +418,69 @@ describe('planner questions', () => {
       QuestionSchema.parse({ id: 'q', dispatch: 'd', kind: 'split', text: 't', state: 'open' })
         .node,
     ).toBe('');
+  });
+});
+
+describe('reconcile helpers', () => {
+  const spec = parse('Top @a { Mid @a.b; }; Lone @z;');
+  const hashes = Object.fromEntries(flatten(spec).map((n) => [n.id, n.hash]));
+  const mk = (id: string, node: string, extra: any = {}) =>
+    QuestionSchema.parse({
+      id,
+      node,
+      dispatch: 'd',
+      kind: 'reconcile',
+      text: 't',
+      state: 'open',
+      ...extra,
+    });
+
+  it('re-anchors orphaned questions to the nearest existing ancestor, else top-level', () => {
+    const qs = [
+      mk('q1', 'a.b.c.d', { node_hash: 'aaaaaaaaaaaa' }),
+      mk('q2', 'gone.x'),
+      mk('q3', 'a.b'),
+      mk('q4', ''),
+    ];
+    expect(orphanedQuestions(qs, spec).map((q) => q.id)).toEqual(['q1', 'q2']);
+    const r = reanchorQuestions(qs, spec);
+    expect(r.questions.map((q) => q.node)).toEqual(['a.b', '', 'a.b', '']);
+    expect(r.questions[0].node_hash).toBe(hashes['a.b']);
+    expect(r.questions[1].node_hash).toBeUndefined();
+    expect(r.changed).toHaveLength(2);
+    // idempotent, and nothing is orphaned afterwards
+    expect(reanchorQuestions(r.questions, spec).changed).toEqual([]);
+    expect(orphanedQuestions(r.questions, spec)).toEqual([]);
+  });
+  it('uses the old tree when given (non-dotted ids)', () => {
+    const old = parse('P @p { C @c; };');
+    const now = parse('P @p;');
+    expect(reanchorQuestions([mk('q', 'c')], now, old).questions[0].node).toBe('p');
+  });
+
+  const item = (o: any) => ({
+    id: 'w',
+    issue: 1,
+    pr: null,
+    state: 'filed',
+    relations: [],
+    claims: { z: { hash: hashes.z, status: 'pending' } },
+    ...o,
+  });
+  const run = (w: any, outbox: any[] = [], qs: any[] = []) =>
+    undispatchedItems({ items: [item(w)] } as any, outbox, qs, spec);
+  it('finds filed issues with no outbox entry, no PR, no open question, fresh claims', () => {
+    const r = run({});
+    expect(r).toEqual([{ issue: 1, work_id: 'w', spec_ids: [`z@${hashes.z}`] }]);
+    expect(implementEntry(r[0], 'now')).toMatchObject({ kind: 'implement', target: 1, body: '' });
+  });
+  it('skips fired/queued, in-flight, gated, stale and orphaned ones', () => {
+    expect(run({}, [{ target: 1 }])).toEqual([]);
+    expect(run({ pr: 5 })).toEqual([]);
+    expect(run({ state: 'in_progress' })).toEqual([]);
+    expect(run({}, [], [mk('q', 'z', { issue: 1 })])).toEqual([]);
+    expect(run({}, [], [mk('q', 'z', { issue: 1, state: 'resolved' })])).toHaveLength(1);
+    expect(run({ claims: { z: { hash: 'bbbbbbbbbbbb', status: 'pending' } } })).toEqual([]);
+    expect(run({ claims: { nope: { hash: hashes.z, status: 'pending' } } })).toEqual([]);
   });
 });

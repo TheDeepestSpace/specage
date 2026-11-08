@@ -1,9 +1,15 @@
 import { cpSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import YAML from 'yaml';
 import {
   OutboxSchema,
   QuestionsSchema,
   anchorQuestion,
+  implementEntry,
+  orphanedQuestions,
+  reanchorQuestions,
+  undispatchedItems,
+  type OutboxEntry,
   parseYaml,
   dispatchBlocked,
   buildData,
@@ -151,20 +157,91 @@ export function cmdDiff(a: Args): number {
   return 0;
 }
 
-/** `specage question anchor <removed-id> --from <old> --to <new>`: where a question about a removed node attaches. */
+/**
+ * `specage question anchor <removed-id> --from <old> --to <new>`: where a question about a removed node attaches.
+ * `specage question reanchor <trail dir> --spec <file|ref> [--from <old>] [--write]`: re-tie questions whose
+ * node no longer exists (migration; idempotent; without --write only reports).
+ */
 export function cmdQuestion(a: Args): number {
+  const opts = {
+    specFile: str(a, 'spec-file'),
+    to: str(a, 'to'),
+    cwd: str(a, 'cwd'),
+    project: str(a, 'project'),
+  };
+  if (a._[1] === 'reanchor') {
+    const dir = a._[2];
+    const spec = str(a, 'spec');
+    if (!dir || !spec)
+      throw new CliError(
+        'usage: specage question reanchor <trail dir> --spec <file|ref> [--from <old>] [--write]',
+      );
+    const from = str(a, 'from');
+    const qs = loadQuestions(undefined, dir);
+    const r = reanchorQuestions(
+      qs,
+      loadSpecRef(spec, opts),
+      from ? loadSpecRef(from, opts) : undefined,
+    );
+    r.changed.forEach((c) => out(`${c.id}: ${c.from} -> ${c.to || '(top-level)'}`));
+    if (!r.changed.length) out('no orphaned questions');
+    else if (a.flags['write'])
+      writeFileSync(join(dir, 'questions.yaml'), YAML.stringify(r.questions));
+    return 0;
+  }
   const id = a._[2];
   const from = str(a, 'from');
   const to = str(a, 'to');
   if (a._[1] !== 'anchor' || !id || !from || !to)
     throw new CliError('usage: specage question anchor <removed-id> --from <old> --to <new>');
-  const opts = {
-    specFile: str(a, 'spec-file'),
-    to,
-    cwd: str(a, 'cwd'),
-    project: str(a, 'project'),
-  };
   out(JSON.stringify(anchorQuestion(loadSpecRef(from, opts), loadSpecRef(to, opts), id)));
+  return 0;
+}
+
+function loadOutbox(dir: string): OutboxEntry[] {
+  const d = join(dir, 'outbox');
+  return listFiles(d)
+    .filter((f) => f.endsWith('.json'))
+    .flatMap((f) => {
+      const r = OutboxSchema.safeParse(JSON.parse(readFileSync(join(d, f), 'utf8')));
+      return r.success ? [r.data] : [];
+    });
+}
+
+/**
+ * `specage plan undispatched <trail dir> --spec <file|ref> [--write] [--created <ts>]`: filed issues that
+ * never got an outbox entry (see core `undispatchedItems`). --write enqueues an `implement` entry each.
+ */
+export function cmdPlan(a: Args): number {
+  const dir = a._[2];
+  const spec = str(a, 'spec');
+  if (a._[1] !== 'undispatched' || !dir || !spec)
+    throw new CliError('usage: specage plan undispatched <trail dir> --spec <file|ref> [--write]');
+  const { state, issues } = loadState(dir);
+  if (issues.length) {
+    issues.forEach((i) => out(`${i.file}: ${i.message}`));
+    return 1;
+  }
+  const items = undispatchedItems(
+    state.work,
+    loadOutbox(dir),
+    state.questions,
+    loadSpecRef(spec, {
+      specFile: str(a, 'spec-file'),
+      cwd: str(a, 'cwd'),
+      project: str(a, 'project'),
+    }),
+  );
+  const created = str(a, 'created') ?? new Date().toISOString();
+  for (const u of items) {
+    out(`#${u.issue} ${u.work_id}: ${u.spec_ids.join(', ')}`);
+    if (a.flags['write']) {
+      mkdirSync(join(dir, 'outbox'), { recursive: true });
+      const e = implementEntry(u, created);
+      writeFileSync(join(dir, 'outbox', `${e.id}.json`), JSON.stringify(e, null, 2) + '\n');
+    }
+  }
+  if (!items.length) out('nothing undispatched');
   return 0;
 }
 
@@ -178,7 +255,7 @@ export function cmdState(a: Args): number {
   const sub = a._[1];
   if (sub === 'validate') {
     const dir = a._[2];
-    if (!dir) throw new CliError('usage: specage state validate <dir>');
+    if (!dir) throw new CliError('usage: specage state validate <dir> [--spec <file|ref>]');
     const { state, issues } = loadState(dir);
     const dirOutbox = join(dir, 'outbox');
     for (const f of listFiles(dirOutbox).filter((f) => f.endsWith('.json'))) {
@@ -201,6 +278,21 @@ export function cmdState(a: Args): number {
           message: `unfired entry targets withdrawn issue #${e.data.target}; delete it`,
         });
     }
+    // every question must be anchored to a node that exists in the current spec (or be top-level)
+    const specRef = str(a, 'spec');
+    if (specRef)
+      for (const q of orphanedQuestions(
+        state.questions,
+        loadSpecRef(specRef, {
+          specFile: str(a, 'spec-file'),
+          cwd: str(a, 'cwd'),
+          project: str(a, 'project'),
+        }),
+      ))
+        issues.push({
+          file: 'questions.yaml',
+          message: `question ${q.id} references missing node "${q.node}"; run \`specage question reanchor\``,
+        });
     issues.forEach((i) => out(`${i.file}: ${i.message}`));
     if (!issues.length) out('state ok');
     return issues.length ? 1 : 0;

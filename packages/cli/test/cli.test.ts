@@ -594,3 +594,39 @@ describe('commit identity', () => {
         expect(isBadNoreplyEmail(m[0].replace('${BOT_ID}', '1')), `${f}: ${m[0]}`).toBe(false);
   });
 });
+
+describe('plan undispatched / question reanchor / state validate --spec', () => {
+  const setup = () => {
+    const d = tmp();
+    const spec = join(d, 's.specage');
+    writeFileSync(spec, 'Top @a { Mid @a.b; }; Lone @z;\n');
+    return { d, spec };
+  };
+  it('reanchors orphaned questions and validate flags them', () => {
+    const { d, spec } = setup();
+    writeFileSync(
+      join(d, 'questions.yaml'),
+      '- {id: q1, node: a.b.gone, dispatch: d, kind: reconcile, text: t, state: open}\n',
+    );
+    const v = run(['state', 'validate', d, '--spec', spec]);
+    expect(v.code).toBe(1);
+    expect(v.out).toContain('q1 references missing node');
+    expect(run(['question', 'reanchor', d, '--spec', spec, '--write']).code).toBe(0);
+    expect(readFileSync(join(d, 'questions.yaml'), 'utf8')).toContain('node: a.b');
+    expect(run(['state', 'validate', d, '--spec', spec]).code).toBe(0);
+  });
+  it('enqueues an implement entry once', () => {
+    const { d, spec } = setup();
+    const hash = JSON.parse(run(['hash', spec, '--json']).out).z.hash;
+    writeFileSync(
+      join(d, 'work.yaml'),
+      `items:\n  - {id: w1, issue: 19, state: filed, claims: {z: {hash: "${hash}", status: pending}}}\n`,
+    );
+    const r = run(['plan', 'undispatched', d, '--spec', spec, '--write']);
+    expect(r.code).toBe(0);
+    expect(r.out).toContain('#19');
+    const f = JSON.parse(readFileSync(join(d, 'outbox/ob-implement-19.json'), 'utf8'));
+    expect(f).toMatchObject({ kind: 'implement', target: 19, spec_ids: [`z@${hash}`] });
+    expect(run(['plan', 'undispatched', d, '--spec', spec]).out).toContain('nothing undispatched');
+  });
+});
