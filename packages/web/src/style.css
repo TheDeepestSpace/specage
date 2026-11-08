@@ -565,14 +565,13 @@ body .cm-tooltip.cm-tooltip-autocomplete {
 /* ---- comment threads ---- */
 .cmt-marker {
   display: inline-block;
-  min-width: 1.2em;
-  padding: 0 0.3em;
-  border-radius: 999px;
-  background: var(--acc);
-  color: var(--bg, #fff);
-  font-size: 0.7rem;
-  line-height: 1.3em;
-  text-align: center;
+  color: var(--acc);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 9px;
+  margin: 6px 3px;
+  cursor: pointer;
 }
 .thread {
   border-left: 3px solid var(--acc);
