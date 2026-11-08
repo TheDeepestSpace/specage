@@ -8,6 +8,7 @@ import {
   normalize,
   sha12,
   anchorQuestion,
+  pendingThreads,
   orphanedQuestions,
   reanchorQuestions,
   undispatchedItems,
@@ -482,5 +483,41 @@ describe('reconcile helpers', () => {
     expect(run({}, [], [mk('q', 'z', { issue: 1, state: 'resolved' })])).toHaveLength(1);
     expect(run({ claims: { z: { hash: 'bbbbbbbbbbbb', status: 'pending' } } })).toEqual([]);
     expect(run({ claims: { nope: { hash: hashes.z, status: 'pending' } } })).toEqual([]);
+  });
+});
+
+describe('pendingThreads', () => {
+  const th = (id: string, authors: string[], state: 'open' | 'resolved' = 'open') => ({
+    id,
+    node: 'a',
+    node_hash: 'h',
+    state,
+    comments: authors.map((author, i) => ({
+      id: `${id}.${i + 1}`,
+      author,
+      at: `2026-01-0${i + 1}T00:00:00Z`,
+      body: 'b',
+    })),
+  });
+  it('lists open threads with an unanswered human comment', () => {
+    const threads = [
+      th('t-0001', ['me']),
+      th('t-0002', ['me', 'the-intern']),
+      th('t-0003', ['me'], 'resolved'),
+    ];
+    expect(pendingThreads(threads).map((t) => t.id)).toEqual(['t-0001']);
+  });
+  it('is idempotent once a reply event exists, and re-opens on a newer human comment', () => {
+    const ev = [
+      {
+        thread: 't-0001',
+        kind: 'reply' as const,
+        author: 'the-intern',
+        at: '2026-02-01T00:00:00Z',
+        body: 'ok',
+      },
+    ];
+    expect(pendingThreads([th('t-0001', ['me'])], ev)).toEqual([]);
+    expect(pendingThreads([th('t-0001', ['me', 'the-intern', 'me'])], [])).toHaveLength(1);
   });
 });

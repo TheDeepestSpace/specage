@@ -19,6 +19,8 @@ import {
   lint,
   loadState,
   parseComments,
+  loadComments,
+  pendingThreads,
   summarize,
   walk,
   type Diagnostic,
@@ -242,6 +244,33 @@ export function cmdPlan(a: Args): number {
     }
   }
   if (!items.length) out('nothing undispatched');
+  return 0;
+}
+
+/**
+ * `specage threads pending <trail dir> --spec-dir <spec checkout> [--json]`: open comment threads whose last
+ * comment is from a human (no agent reply yet). Independent of the spec diff, so comment-only commits count.
+ */
+export function cmdThreads(a: Args): number {
+  const dir = a._[2];
+  const specDir = str(a, 'spec-dir');
+  if (a._[1] !== 'pending' || !dir || !specDir)
+    throw new CliError('usage: specage threads pending <trail dir> --spec-dir <dir> [--json]');
+  const { state, issues } = loadState(dir);
+  const c = loadComments(specDir);
+  const all = [...issues.map((i) => `${i.file}: ${i.message}`), ...c.issues];
+  if (all.length) {
+    all.forEach((m) => out(m));
+    return 1;
+  }
+  const pending = pendingThreads(c.threads, state.thread_events);
+  if (a.flags['json']) out(JSON.stringify(pending, null, 2));
+  else if (!pending.length) out('no threads need a reply');
+  else
+    for (const t of pending) {
+      const last = t.comments[t.comments.length - 1];
+      out(`${t.id} on ${t.node}: ${last.author}: ${last.body}`);
+    }
   return 0;
 }
 
