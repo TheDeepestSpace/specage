@@ -448,6 +448,13 @@ describe('reconcile helpers', () => {
     expect(r.questions[0].node_hash).toBe(hashes['a.b']);
     expect(r.questions[1].node_hash).toBeUndefined();
     expect(r.changed).toHaveLength(2);
+    expect(r.questions.map((q) => q.original_node)).toEqual([
+      'a.b.c.d',
+      'gone.x',
+      undefined,
+      undefined,
+    ]);
+    expect(r.questions[0].text).toBe(qs[0].text);
     // idempotent, and nothing is orphaned afterwards
     expect(reanchorQuestions(r.questions, spec).changed).toEqual([]);
     expect(orphanedQuestions(r.questions, spec)).toEqual([]);

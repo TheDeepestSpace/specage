@@ -112,6 +112,8 @@ export const QuestionSchema = z.object({
   /** anchor node; '' = top-level (its node was removed with no surviving ancestor) */
   node: z.string().default(''),
   node_hash: Hash.optional(),
+  /** node the question was first asked about, recorded when it is re-anchored because that node was removed */
+  original_node: z.string().optional(),
   dispatch: z.string(),
   kind: z.enum(['ambiguity', 'contradiction', 'reconcile', 'rename', 'split']),
   text: z.string(),

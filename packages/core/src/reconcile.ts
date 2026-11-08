@@ -40,6 +40,7 @@ export function reanchorQuestions(
     delete rest.node_hash;
     return {
       ...rest,
+      original_node: q.original_node ?? q.node,
       node: anchor.node,
       ...(anchor.node_hash ? { node_hash: anchor.node_hash } : {}),
     };
