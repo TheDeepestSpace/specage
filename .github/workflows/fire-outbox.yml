@@ -69,5 +69,6 @@ jobs:
         run: |
           cd "$RUNNER_TEMP/trail"
           git diff --quiet -- outbox && { echo "nothing fired"; exit 0; }
-          git config user.name "specage-app[bot]"; git config user.email "specage-app[bot]@users.noreply.github.com"
+          SLUG="${{ steps.app.outputs.app-slug }}"; BOT_ID=$(gh api "users/${SLUG}%5Bbot%5D" --jq .id)
+          git config user.name "${SLUG}[bot]"; git config user.email "${BOT_ID}+${SLUG}[bot]@users.noreply.github.com"
           node "$GITHUB_WORKSPACE/packages/cli/dist/bin.js" state commit -m "outbox: mark fired" --dir .

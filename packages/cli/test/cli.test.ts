@@ -5,6 +5,8 @@ import { decide, verifyPr, type PrFacts } from '../src/verify.js';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
+import { isBadNoreplyEmail } from '../src/util.js';
+import { readdirSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 const root = resolve(__dirname, '../../..');
@@ -570,6 +572,26 @@ describe('planner dispatch', () => {
     });
     expect(run(['callback', '--status', 'success', '--context', ctx]).code).toBe(0);
     expect(run(['callback', '--status', 'failure', '--context', ctx]).code).toBe(1);
+  });
+});
+
+describe('commit identity', () => {
+  it('flags noreply emails without a numeric id', () => {
+    for (const e of ['bot@users.noreply.github.com', 'specage-app[bot]@users.noreply.github.com'])
+      expect(isBadNoreplyEmail(e)).toBe(true);
+    for (const e of ['308992161+the-intern-bot[bot]@users.noreply.github.com', 't@t', ''])
+      expect(isBadNoreplyEmail(e)).toBe(false);
+  });
+  it('no checked-in workflow/action sets an id-less noreply email', () => {
+    const files = [
+      ...readdirSync(join(root, '.github/workflows')).map((f) =>
+        join(root, '.github/workflows', f),
+      ),
+      join(root, 'packages/action/publish/action.yml'),
+    ];
+    for (const f of files)
+      for (const m of readFileSync(f, 'utf8').matchAll(/[^\s"'=]+@users\.noreply\.github\.com/g))
+        expect(isBadNoreplyEmail(m[0].replace('${BOT_ID}', '1')), `${f}: ${m[0]}`).toBe(false);
   });
 });
 

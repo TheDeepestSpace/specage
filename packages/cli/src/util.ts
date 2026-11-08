@@ -126,3 +126,9 @@ export const templatesDir = () => join(repoRoot(), 'templates');
 export const protocolDir = () => join(repoRoot(), 'protocol');
 
 export const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/** GitHub links a commit to a bot only via `<id>+<slug>[bot]@users.noreply.github.com`; bare `x[bot]@`/`bot@` resolve to unrelated users. */
+export function isBadNoreplyEmail(email: string): boolean {
+  const m = /^(.*)@users\.noreply\.github\.com$/i.exec(email.trim());
+  return !!m && !/^\d+\+[^@+\s]+$/.test(m[1]);
+}
