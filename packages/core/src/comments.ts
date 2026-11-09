@@ -83,7 +83,18 @@ export function mergeThreads(threads: Thread[], events: ThreadEvent[] = []): Thr
       delete t.resolved_at;
     }
   }
+  for (const t of out) sortComments(t.comments);
   return out;
+}
+
+/** Stable sort by timestamp (ties keep original order). */
+function sortComments(cs: Thread['comments']): void {
+  const key = (at: string) => {
+    const n = Date.parse(at);
+    return Number.isNaN(n) ? 0 : n;
+  };
+  const idx = new Map(cs.map((c, i) => [c, i]));
+  cs.sort((a, b) => key(a.at) - key(b.at) || idx.get(a)! - idx.get(b)!);
 }
 
 export const AGENT_AUTHOR = 'the-intern';

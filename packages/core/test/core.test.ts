@@ -358,6 +358,28 @@ describe('comment threads', () => {
     expect(m[0].comments.at(-1)).toMatchObject({ author: 'agent', body: 'done' });
     expect(m[0]).toMatchObject({ state: 'resolved', resolved_by: 'agent' });
   });
+  it('orders interleaved human and agent comments by time', () => {
+    let t = applyOp(
+      [],
+      { op: 'create', node: 'a.b', node_hash: '', body: 'one' },
+      'u',
+      '2026-01-01T01:00:00Z',
+      {
+        'a.b': 'h',
+      },
+    );
+    t = applyOp(
+      t,
+      { op: 'reply', thread: 't-0001', body: 'three' },
+      'u',
+      '2026-01-01T03:00:00Z',
+      {},
+    );
+    const m = mergeThreads(t, [
+      { thread: 't-0001', kind: 'reply', author: 'bot', at: '2026-01-01T02:00:00Z', body: 'two' },
+    ]);
+    expect(m[0].comments.map((c) => c.body)).toEqual(['one', 'two', 'three']);
+  });
 });
 
 describe('planner questions', () => {
