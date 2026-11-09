@@ -40,7 +40,7 @@ import { diff as coreDiff, lint, parse, type State, type Thread } from '@specage
 import { api, ApiError, loadMe } from './api.js';
 import { analyse, dotStatus, nodeAtLine, slug, type Analysis } from './analysis.js';
 import { conflictDialog } from './conflict.js';
-import { h, store } from './dom.js';
+import { h, store, warningBanner } from './dom.js';
 import grammarSrc from '../../../protocol/GRAMMAR.md?raw';
 import { renderMarkdown } from './markdown.js';
 import { openFor } from './questions.js';
@@ -69,11 +69,13 @@ export async function renderEditor(root: HTMLElement, repo: string) {
   let spec: { content: string; head_sha: string; path: string };
   let state: State = emptyState();
   let threads: Thread[] = [];
+  let warnings: string[] = [];
   try {
     [spec, state] = await Promise.all([
       api('GET', `/api/r/${repo}/spec`),
       api('GET', `/api/r/${repo}/state`).then((s: any) => {
         threads = s.threads ?? [];
+        warnings = s.warnings ?? [];
         return {
           trace: s.trace,
           work: s.work,
@@ -426,13 +428,16 @@ export async function renderEditor(root: HTMLElement, repo: string) {
       vimMode,
       saveBtn,
     ),
+    ...(warnings.length ? [warningBanner(warnings)] : []),
     diagBox,
     h('div', { class: 'split' }, editorCol, paneEl),
   );
 
   // the split fills the viewport below the (possibly wrapped) header
   const topEl = root.querySelector('header.top') as HTMLElement;
-  const fitTop = () => root.style.setProperty('--top-h', `${topEl.offsetHeight}px`);
+  const bannerEl = root.querySelector('.banner-warn') as HTMLElement | null;
+  const fitTop = () =>
+    root.style.setProperty('--top-h', `${topEl.offsetHeight + (bannerEl?.offsetHeight ?? 0)}px`);
   fitTop();
   addEventListener('resize', fitTop);
 

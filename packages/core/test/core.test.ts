@@ -263,6 +263,20 @@ describe('yaml hashes', () => {
   });
 });
 
+describe('parseState tolerance', () => {
+  it('drops only the invalid trace node and reports it', () => {
+    const { state, issues } = parseState({
+      trace: parseYaml(
+        'nodes:\n  a: {spec_hash: 123456789012, status: partial}\n  b: {spec_hash: 123456789013, status: planned}',
+      ),
+    });
+    expect(Object.keys(state.trace.nodes)).toEqual(['b']);
+    expect(issues).toHaveLength(1);
+    expect(issues[0].file).toBe('trace.yaml');
+    expect(issues[0].message).toContain('nodes.a.status');
+  });
+});
+
 describe('$id references', () => {
   const src = 'frontend @fe; $fe is hosted on GH Pages @infra; costs $5 and $Home @x;';
   it('extracts refs', () => {

@@ -451,14 +451,19 @@ export function createApp({ env, db, github, now = Date.now }: Deps) {
       const t = await github.getFile(p, trailBranch(repo));
       return t === null ? undefined : parseYaml(t);
     };
-    const { state } = parseState({
+    const { state, issues } = parseState({
       trace: await f('trace.yaml'),
       work: await f('work.yaml'),
       questions: await f('questions.yaml'),
       thread_events: await f('thread-events.yaml'),
     });
     const { threads } = parseComments(await github.getFile(COMMENTS_FILE, specBranch(repo)));
-    return c.json({ ...state, threads: mergeThreads(threads, state.thread_events), report: null });
+    return c.json({
+      ...state,
+      threads: mergeThreads(threads, state.thread_events),
+      report: null,
+      warnings: issues.map((i) => `${i.file} ${i.message}`),
+    });
   });
 
   const rateLimit = (c: Context): Response | null => {

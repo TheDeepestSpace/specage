@@ -2,7 +2,7 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { buildDispatch } from '../src/dispatch.js';
 import { buildPlannerDispatch } from '@specage/core';
 import { decide, verifyPr, type PrFacts } from '../src/verify.js';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { isBadNoreplyEmail } from '../src/util.js';
@@ -402,6 +402,24 @@ describe('render', () => {
     expect(data.nodes['shoot.burst.bar'].status).toBe('stale');
     expect(data.aggregate.shoot).toBeDefined();
     expect(data.report).toContain('dispatch/tbgwaf/2026-10-30T02-11Z');
+  });
+});
+
+describe('render with an invalid trace node', () => {
+  it('still renders, ignores only that node and records a warning', () => {
+    const st = join(tmp(), 'state');
+    cpSync(join(root, 'fixtures/tbgwaf/state'), st, { recursive: true });
+    const tp = join(st, 'trace.yaml');
+    const t = readFileSync(tp, 'utf8');
+    const m = t.match(/status: (implemented|planned|in_progress)/)!;
+    writeFileSync(tp, t.replace(m[0], 'status: partial'));
+    const out = join(tmp(), 'site');
+    const r = run(['render', '--spec', FIX, '--state', st, '--out', out, '--repo', 'o/r']);
+    expect(r.code, r.err).toBe(0);
+    const data = JSON.parse(readFileSync(join(out, 'data.json'), 'utf8'));
+    expect(data.warnings).toHaveLength(1);
+    expect(data.warnings[0]).toContain('trace.yaml');
+    expect(Object.keys(data.trace).length).toBeGreaterThan(0);
   });
 });
 

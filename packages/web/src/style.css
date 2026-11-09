@@ -497,6 +497,15 @@ dialog.conflict {
   max-height: 20rem;
   overflow: auto;
 }
+.banner-warn {
+  border: 1px solid var(--c-stale);
+  border-radius: 4px;
+  padding: 0.5rem 0.75rem;
+  margin: 0.5rem 0;
+}
+.banner-warn ul {
+  margin: 0.25rem 0 0;
+}
 .warn {
   color: var(--c-stale);
 }
