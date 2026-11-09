@@ -60,3 +60,13 @@ export const store = {
 export function fail(root: HTMLElement, msg: string) {
   root.replaceChildren(h('p', { class: 'error' }, msg));
 }
+
+/** Visible banner listing problems in the state files (the invalid parts were ignored). */
+export function warningBanner(warnings: string[]): HTMLElement {
+  return h(
+    'div',
+    { class: 'banner-warn', role: 'alert' },
+    h('strong', {}, 'Some state data was ignored because it is invalid:'),
+    h('ul', {}, ...warnings.map((w) => h('li', {}, w))),
+  );
+}

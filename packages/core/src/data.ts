@@ -40,6 +40,8 @@ export interface SpecData {
   /** node-anchored comment threads (human + agent), merged */
   threads?: Thread[];
   report?: string;
+  /** problems found in the state files (invalid parts were ignored) */
+  warnings?: string[];
   aggregate: Record<string, Record<string, number>>;
 }
 
@@ -58,6 +60,7 @@ export function buildData(
   opts: {
     project: string;
     report?: string;
+    warnings?: string[];
     editUrl?: string;
     repo?: string;
     specCommit?: string;
@@ -102,6 +105,7 @@ export function buildData(
     questions: state.questions,
     ...(opts.threads?.length ? { threads: mergeThreads(opts.threads, state.thread_events) } : {}),
     report: opts.report,
+    ...(opts.warnings?.length ? { warnings: opts.warnings } : {}),
     aggregate,
   };
 }

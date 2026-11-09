@@ -567,11 +567,8 @@ export function cmdRender(a: Args): number {
     throw new CliError('usage: specage render --spec <file> --state <dir> --out <dir>');
   const spec = readSpecFile(specFile);
   const { state, issues } = stateDir ? loadState(stateDir) : loadState('/nonexistent');
-  if (issues.length)
-    throw new CliError(
-      `invalid state: ${issues.map((i) => `${i.file} ${i.message}`).join('; ')}`,
-      1,
-    );
+  // Render stays lenient: invalid parts are ignored and surfaced as a banner in the page.
+  const warnings = issues.map((i) => `${i.file} ${i.message}`);
   let report: string | undefined;
   if (stateDir) {
     const rs = listFiles(join(stateDir, 'dispatches')).filter((f) => f.endsWith('.md'));
@@ -586,6 +583,7 @@ export function cmdRender(a: Args): number {
     threads: cm.threads,
     project: str(a, 'project') ?? (specFile.split('/').pop() ?? '').replace(/\.specage$/, ''),
     report,
+    warnings,
     editUrl: str(a, 'edit-url'),
     repo: str(a, 'repo'),
     specCommit: str(a, 'spec-commit'),
