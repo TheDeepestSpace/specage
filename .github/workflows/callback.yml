@@ -33,7 +33,7 @@ jobs:
       # specage App installation token: Contents rw on the data repo (trail), Pull requests/Issues read on
       # project repos, Actions write on the-intern (to dispatch). Its login must be a key of dispatch.callers.
       - id: app
-        uses: actions/create-github-app-token@v2
+        uses: actions/create-github-app-token@v3
         with:
           app-id: ${{ secrets.SPECAGE_APP_ID }}
           private-key: ${{ secrets.SPECAGE_APP_PRIVATE_KEY }}
