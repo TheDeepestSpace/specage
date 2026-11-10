@@ -63,6 +63,9 @@ test('editor: sidebar with pinned node', async ({ page }) => {
   await page.locator('#pin').check();
   await expect(page.locator('#pin')).toBeChecked();
   await expect(page.locator('#pane')).toContainText('verified');
+  const work = page.locator('#pane li', { hasText: 'w-burst-cap' });
+  await expect(work).toContainText('PR #34 · in_review');
+  await expect(work).not.toContainText('pending');
   await expect(page).toHaveScreenshot('editor-pinned.png');
 });
 

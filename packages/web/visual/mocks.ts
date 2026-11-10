@@ -32,7 +32,18 @@ export const STATE = {
       },
     },
   },
-  work: { items: [] },
+  work: {
+    items: [
+      {
+        id: 'w-burst-cap',
+        issue: 12,
+        pr: 34,
+        state: 'in_review',
+        relations: [],
+        claims: { 'shoot.burst.cap': { hash: hashOf('shoot.burst.cap'), status: 'pending' } },
+      },
+    ],
+  },
   questions: [],
   report: null,
 };
