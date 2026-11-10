@@ -446,6 +446,18 @@ pre {
 .cm-spec-escape {
   color: var(--c-in_progress);
 }
+.cm-brace-d0 {
+  color: #d4a000;
+}
+.cm-brace-d1 {
+  color: #c13fc1;
+}
+.cm-brace-d2 {
+  color: #1f7fd6;
+}
+.cm-brace-bad {
+  color: var(--c-contradiction);
+}
 .cm-foldPlaceholder {
   background: var(--card);
   border: 1px solid var(--line);

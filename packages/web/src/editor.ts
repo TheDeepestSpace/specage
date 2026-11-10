@@ -1,6 +1,8 @@
 import {
   acceptCompletion,
   autocompletion,
+  closeBrackets,
+  closeBracketsKeymap,
   completionKeymap,
   type CompletionContext,
   type CompletionResult,
@@ -238,6 +240,26 @@ export async function renderEditor(root: HTMLElement, repo: string) {
           for (const m of text.matchAll(re))
             if (m[0])
               out.push(Decoration.mark({ class: cls }).range(m.index!, m.index! + m[0].length));
+        // brace pairs coloured by nesting depth; `\{` `\}` are escaped text, not braces
+        let depth = 0;
+        const stack: number[] = [];
+        for (const m of text.matchAll(/\\[\s\S]|[{}]/g)) {
+          if (m[0].length > 1) continue;
+          const i = m.index!;
+          let d: number;
+          if (m[0] === '{') {
+            d = depth++ % 3;
+            stack.push(d);
+          } else {
+            if (!stack.length) {
+              out.push(Decoration.mark({ class: 'cm-brace-bad' }).range(i, i + 1));
+              continue;
+            }
+            d = stack.pop()!;
+            depth--;
+          }
+          out.push(Decoration.mark({ class: `cm-brace-d${d}` }).range(i, i + 1));
+        }
         return Decoration.set(out, true);
       }
     },
@@ -534,6 +556,7 @@ export async function renderEditor(root: HTMLElement, repo: string) {
         foldBySpec,
         folding,
         history(),
+        closeBrackets(),
         highlight,
         lintSource,
         lintGutter(),
@@ -571,6 +594,7 @@ export async function renderEditor(root: HTMLElement, repo: string) {
           },
           ...foldKeymap,
           ...completionKeymap,
+          ...closeBracketsKeymap,
           ...defaultKeymap,
           ...historyKeymap,
         ]),
