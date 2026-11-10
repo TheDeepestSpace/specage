@@ -52,6 +52,18 @@ jobs:
           path: |
             packages/web/visual/playwright-report
             packages/web/visual/test-results
+  # The single required status check. Always runs (this workflow has no path filters); fails if any
+  # needed job failed or was cancelled. Any new CI job in any workflow must be added to `needs`.
+  ci-gate:
+    if: always()
+    needs: [test, visual]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fail if any needed job failed or was cancelled
+        env: {RESULTS: '${{ toJSON(needs.*.result) }}'}
+        run: |
+          echo "$RESULTS"
+          if echo "$RESULTS" | grep -qE '"(failure|cancelled)"'; then exit 1; fi
   dogfood:
     needs: test
     if: github.ref == 'refs/heads/main'
