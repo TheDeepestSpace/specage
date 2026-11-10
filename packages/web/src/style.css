@@ -363,6 +363,14 @@ pre {
 .cm-editor .cm-line {
   padding: 0 0.75rem 0 0.9rem; /* breathing room between gutter and text */
 }
+.cm-editor .cm-ruler {
+  position: absolute;
+  top: 0;
+  width: 1px;
+  background: var(--line);
+  pointer-events: none;
+  z-index: 0;
+}
 .cm-editor .cm-gutters {
   flex-shrink: 0;
   background: var(--card);
