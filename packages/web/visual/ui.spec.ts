@@ -69,6 +69,17 @@ test('editor: sidebar with pinned node', async ({ page }) => {
   await expect(page).toHaveScreenshot('editor-pinned.png');
 });
 
+test('status pane: statement font-family matches the code panel', async ({ page }) => {
+  await openEditor(page);
+  await page.locator('.cm-line', { hasText: 'never exceeds the magazine' }).click();
+  await expect(page.locator('#crumbs strong')).toHaveText('shoot.burst.cap');
+  const statement = page.locator('#pane .ptext-code').first();
+  await expect(statement).toBeVisible();
+  const family = (loc: ReturnType<Page['locator']>) =>
+    loc.evaluate((el) => getComputedStyle(el).fontFamily);
+  expect(await family(statement)).toBe(await family(page.locator('.cm-scroller').first()));
+});
+
 test('editor: empty pane state', async ({ page }) => {
   await openEditor(page, '# empty\n', 'empty');
   await expect(page.locator('#pane')).toContainText('Place the cursor in a node.');
