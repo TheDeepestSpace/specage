@@ -123,6 +123,20 @@ test('editor: braces auto-close, overtype, backspace pair, and colour by depth',
   await page.keyboard.press('Control+z');
 });
 
+test('editor: only { auto-closes; ( and " insert no closing char', async () => {
+  await page.goto('/r/o/r');
+  await expect(page.locator('.cm-content')).toContainText('Limit magazine');
+  await page.locator('.cm-content').click();
+  await page.keyboard.press('Control+End');
+  await page.keyboard.press('Enter');
+  await page.keyboard.type('(');
+  await page.keyboard.type('"');
+  const last = page.locator('.cm-line').last();
+  await expect(last).toHaveText('("');
+  await page.keyboard.press('Control+z');
+  await page.keyboard.press('Control+z');
+});
+
 test('GRAMMAR.md tab is rendered, read-only, and keeps spec edits', async () => {
   await page.goto('/r/o/r');
   await expect(page.locator('.cm-content')).toContainText('Limit magazine');

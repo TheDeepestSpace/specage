@@ -557,6 +557,8 @@ export async function renderEditor(root: HTMLElement, repo: string) {
         folding,
         history(),
         closeBrackets(),
+        // only `{` auto-closes; ( [ ' " ` stay literal in spec prose
+        EditorState.languageData.of(() => [{ closeBrackets: { brackets: ['{'] } }]),
         highlight,
         lintSource,
         lintGutter(),
