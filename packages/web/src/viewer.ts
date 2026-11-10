@@ -158,7 +158,7 @@ export function renderViewer(root: HTMLElement, data: SpecData) {
         h(
           'div',
           { class: 'work' },
-          `${w.id}${w.issue ? ` · issue #${w.issue}` : ''}${w.pr ? ` · PR #${w.pr}` : ''} · ${w.state} · claim ${c.status}${c.hash !== n.hash ? ' (stale hash)' : ''}`,
+          `${w.id}${w.issue ? ` · issue #${w.issue}` : ''}${w.pr ? ` · PR #${w.pr}` : ''} · ${w.state}${c.hash !== n.hash ? ' (stale hash)' : ''}`,
         ),
       );
     }

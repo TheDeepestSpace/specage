@@ -113,7 +113,7 @@ export function renderPane(
           return h(
             'li',
             {},
-            `${w.id}${w.issue ? ` · #${w.issue}` : ''}${w.pr ? ` · PR #${w.pr}` : ''} · ${w.state} · ${c.status}${c.hash !== n.hash ? ' · claim is on an older hash' : ''}`,
+            `${w.id}${w.issue ? ` · #${w.issue}` : ''}${w.pr ? ` · PR #${w.pr}` : ''} · ${w.state}${c.hash !== n.hash ? ' · claim is on an older hash' : ''}`,
           );
         }),
       ),
