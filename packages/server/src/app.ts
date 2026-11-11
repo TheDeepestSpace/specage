@@ -458,8 +458,24 @@ export function createApp({ env, db, github, now = Date.now }: Deps) {
     return c.json({ content, head_sha: head, path });
   });
 
+  // "active agent" = open work item in_progress whose PR has a queued/in-progress workflow run;
+  // when runs are unreadable, any in_progress work item counts. Cached 30s per repo.
+  const activeCache = new Map<string, { at: number; prs: number[] | null }>();
+  const activePrs = async (full: string): Promise<number[] | null> => {
+    const hit = activeCache.get(full);
+    if (hit && now() - hit.at < 30_000) return hit.prs;
+    let prs: number[] | null = null;
+    try {
+      prs = await github.getActivePrs(full);
+    } catch {
+      /* unreadable: fall back */
+    }
+    activeCache.set(full, { at: now(), prs });
+    return prs;
+  };
+
   app.get('/api/r/:owner/:repo/state', async (c) => {
-    const { repo } = c.req.param();
+    const { owner, repo } = c.req.param();
     const f = async (p: string) => {
       const t = await github.getFile(p, trailBranch(repo));
       return t === null ? undefined : parseYaml(t);
@@ -471,8 +487,18 @@ export function createApp({ env, db, github, now = Date.now }: Deps) {
       thread_events: await f('thread-events.yaml'),
     });
     const { threads } = parseComments(await github.getFile(COMMENTS_FILE, specBranch(repo)));
+    const working = state.work.items.filter((w) => w.state === 'in_progress');
+    const runs = working.length ? await activePrs(`${owner}/${repo}`) : [];
+    const active_nodes = [
+      ...new Set(
+        working
+          .filter((w) => runs === null || (w.pr !== null && runs.includes(w.pr)))
+          .flatMap((w) => Object.keys(w.claims)),
+      ),
+    ];
     return c.json({
       ...state,
+      active_nodes,
       threads: mergeThreads(threads, state.thread_events),
       report: null,
       warnings: issues.map((i) => `${i.file} ${i.message}`),
