@@ -1,0 +1,81 @@
+name: merge-sweep
+# Nightly + manual sweep: squash-merge open `specage/*` PRs that are approved, green and carry a
+# `Spec:` trailer. Conflicts / not-mergeable PRs are skipped (left for the conflict dispatcher);
+# a skipped PR never fails the run. Merges are sequential and mergeability is re-checked per PR.
+on:
+  schedule:
+    - cron: '17 3 * * *'
+  workflow_dispatch:
+    inputs:
+      repo: {description: 'project code repo (owner/repo); defaults to this repo', required: false}
+permissions:
+  contents: read
+concurrency:
+  group: merge-sweep
+  cancel-in-progress: false
+jobs:
+  sweep:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      # specage App token: Pull requests rw + Contents rw on the project repo.
+      - id: app
+        uses: actions/create-github-app-token@v3
+        with:
+          app-id: ${{ secrets.SPECAGE_APP_ID }}
+          private-key: ${{ secrets.SPECAGE_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+      - name: Merge approved & green specage PRs
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          REPO: ${{ inputs.repo || github.repository }}
+        run: |
+          set -uo pipefail
+          [[ "$REPO" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] || { echo "bad repo"; exit 1; }
+          merged=(); skipped=()
+          skip() { skipped+=("#$1: $2"); echo "skip #$1: $2"; }
+
+          prs=$(gh pr list -R "$REPO" --state open --limit 200 --json number,headRefName \
+                  --jq '.[] | select(.headRefName | startswith("specage/")) | .number' | sort -n)
+          for n in $prs; do
+            # mergeable is computed lazily: poll while UNKNOWN
+            for _ in 1 2 3 4 5; do
+              info=$(gh pr view "$n" -R "$REPO" --json title,isDraft,reviewDecision,mergeable,headRefOid,statusCheckRollup) || { info=; break; }
+              [ "$(jq -r .mergeable <<<"$info")" != UNKNOWN ] && break
+              sleep 5
+            done
+            [ -n "$info" ] || { skip "$n" "could not read PR"; continue; }
+            sha=$(jq -r .headRefOid <<<"$info")
+            [ "$(jq -r .isDraft <<<"$info")" = false ] || { skip "$n" "draft"; continue; }
+            [ "$(jq -r .reviewDecision <<<"$info")" = APPROVED ] || { skip "$n" "not approved ($(jq -r .reviewDecision <<<"$info"))"; continue; }
+            [ "$(jq -r .mergeable <<<"$info")" = MERGEABLE ] || { skip "$n" "not mergeable ($(jq -r .mergeable <<<"$info"))"; continue; }
+
+            # ci-gate if present, otherwise every check must be green (skipped/neutral are fine)
+            if jq -e '[.statusCheckRollup[] | select((.name // .context) == "ci-gate")] | length > 0' <<<"$info" >/dev/null; then
+              jq -e '[.statusCheckRollup[] | select((.name // .context) == "ci-gate")] | all(.conclusion == "SUCCESS")' <<<"$info" >/dev/null \
+                || { skip "$n" "ci-gate not green"; continue; }
+            else
+              jq -e '[.statusCheckRollup[] | (.conclusion // .state)] | all(. == "SUCCESS" or . == "SKIPPED" or . == "NEUTRAL")' <<<"$info" >/dev/null \
+                || { skip "$n" "checks not green"; continue; }
+            fi
+
+            # Spec: trailers from the PR's commits are carried into the squash message
+            trailers=$(gh api --paginate "repos/$REPO/pulls/$n/commits" --jq '.[].commit.message' \
+                         | grep -E '^Spec(-Release)?: ' | sort -u)
+            grep -q '^Spec: ' <<<"$trailers" || { skip "$n" "no Spec: trailer"; continue; }
+
+            title=$(jq -r .title <<<"$info")
+            if out=$(gh pr merge "$n" -R "$REPO" --squash --match-head-commit "$sha" \
+                       --subject "$title (#$n)" --body "$trailers" 2>&1); then
+              merged+=("#$n"); echo "merged #$n"
+            else
+              skip "$n" "merge failed: $(tr '\n' ' ' <<<"$out")"
+            fi
+          done
+
+          {
+            echo "## merge-sweep ($REPO)"
+            echo "**Merged (${#merged[@]}):** ${merged[*]:-none}"
+            echo "**Skipped (${#skipped[@]}):**"
+            for s in "${skipped[@]}"; do echo "- $s"; done
+          } | tee -a "$GITHUB_STEP_SUMMARY"
