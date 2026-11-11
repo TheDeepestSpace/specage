@@ -230,6 +230,20 @@ pre {
 .st-in_progress {
   background: var(--c-in_progress);
 }
+.dot.pulse {
+  animation: dot-pulse 1.4s ease-in-out infinite;
+}
+@keyframes dot-pulse {
+  50% {
+    opacity: 0.35;
+    transform: scale(0.8);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .dot.pulse {
+    animation: none;
+  }
+}
 .st-implemented {
   background: var(--c-implemented);
 }

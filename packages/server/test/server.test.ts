@@ -272,6 +272,34 @@ describe('API', () => {
     expect((await h.req('GET', '/api/r/o/other/spec')).status).toBe(404);
     expect((await h.req('GET', '/api/r/o/..%2Fx/spec')).status).toBe(400);
   });
+  it('state exposes active_nodes for in_progress work with an active run', async () => {
+    let skew = 0;
+    const h = harness({ now: () => Date.now() + skew });
+    await h.signup(auth());
+    const gh = h.github;
+    const hash = 'a'.repeat(12);
+    const item = (id: string, pr: number, state: string) => ({
+      id,
+      issue: pr,
+      pr,
+      state,
+      claims: { [`n-${id}`]: { hash, status: 'pending' } },
+    });
+    gh.files[`${'specages/r/trail'}:work.yaml`] = YAML.stringify({
+      items: [
+        item('w1', 1, 'in_progress'),
+        item('w2', 2, 'in_progress'),
+        item('w3', 3, 'in_review'),
+      ],
+    });
+    const get = async () =>
+      ((await (await h.req('GET', '/api/r/o/r/state')).json()) as any).active_nodes;
+    gh.activePrs = [1, 3];
+    expect(await get()).toEqual(['n-w1']);
+    gh.activePrs = null; // runs unreadable: fall back to in_progress work items
+    skew = 31_000;
+    expect(await get()).toEqual(['n-w1', 'n-w2']);
+  });
   it('save: 422 on lint errors, 409 on conflict, ok otherwise, author header', async () => {
     const h = harness();
     await h.signup(auth());

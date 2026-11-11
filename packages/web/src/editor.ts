@@ -38,7 +38,15 @@ import {
 import { Vim, getCM, vim } from '@replit/codemirror-vim';
 import { diff as coreDiff, lint, parse, type State, type Thread } from '@specage/core/browser';
 import { api, ApiError, loadMe } from './api.js';
-import { analyse, dotStatus, nodeAtLine, slug, type Analysis } from './analysis.js';
+import {
+  analyse,
+  dotClass,
+  dotPulse,
+  dotStatus,
+  nodeAtLine,
+  slug,
+  type Analysis,
+} from './analysis.js';
 import { conflictDialog } from './conflict.js';
 import { h, setupBadge, store, warningBanner, type SetupInfo } from './dom.js';
 import grammarSrc from '../../../protocol/GRAMMAR.md?raw';
@@ -68,6 +76,7 @@ export async function renderEditor(root: HTMLElement, repo: string) {
   }
   let spec: { content: string; head_sha: string; path: string };
   let state: State = emptyState();
+  let active = new Set<string>();
   let threads: Thread[] = [];
   let warnings: string[] = [];
   try {
@@ -76,6 +85,7 @@ export async function renderEditor(root: HTMLElement, repo: string) {
       api('GET', `/api/r/${repo}/state`).then((s: any) => {
         threads = s.threads ?? [];
         warnings = s.warnings ?? [];
+        active = new Set<string>(s.active_nodes ?? []);
         return {
           trace: s.trace,
           work: s.work,
@@ -101,15 +111,18 @@ export async function renderEditor(root: HTMLElement, repo: string) {
   });
 
   class Dot extends GutterMarker {
-    constructor(readonly status: string) {
+    constructor(
+      readonly status: string,
+      readonly pulse = false,
+    ) {
       super();
     }
     eq(o: Dot) {
-      return o.status === this.status;
+      return o.status === this.status && o.pulse === this.pulse;
     }
     toDOM() {
       const s = document.createElement('span');
-      s.className = `dot st-${this.status}`;
+      s.className = dotClass(this.status, this.pulse);
       s.title = this.status.replace('_', ' ');
       s.dataset.status = this.status;
       return s;
@@ -120,7 +133,7 @@ export async function renderEditor(root: HTMLElement, repo: string) {
     lineMarker(view, line) {
       const a = view.state.field(analysisField);
       const n = a.byLine.get(view.state.doc.lineAt(line.from).number);
-      return n && n.id ? new Dot(dotStatus(n, state)) : null;
+      return n && n.id ? new Dot(dotStatus(n, state), dotPulse(n, state, active)) : null;
     },
     lineMarkerChange: (u) => u.transactions.some((t) => t.effects.some((e) => e.is(setState))),
     initialSpacer: () => new Dot('unknown'),

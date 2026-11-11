@@ -50,6 +50,11 @@ export interface GitHub {
   getRepo(repo: string): Promise<RepoInfo | null>;
   /** auto-merge facts for a project repo's default branch; fields are null when unreadable */
   getMergeFacts(repo: string, branch: string): Promise<MergeFacts>;
+  /**
+   * PR numbers with a queued / in-progress workflow run on the repo, or null when unreadable
+   * (e.g. the App lacks Actions read). One call per status; callers cache.
+   */
+  getActivePrs(repo: string): Promise<number[] | null>;
   /** creates missing labels on a project repo; throws PermissionError without Issues access */
   ensureLabels(repo: string, labels: string[]): Promise<void>;
   /** creates an orphan branch specages/<project>/<kind> with one commit; throws Conflict if it exists */
@@ -110,6 +115,13 @@ export const ALLOWED: { method: string; auth: 'jwt' | 'install'; re: RegExp }[] 
     method: 'GET',
     auth: 'install',
     re: new RegExp(`^/repos/${SEG}/${SEG}/git/matching-refs/heads/specages/$`),
+  },
+  {
+    method: 'GET',
+    auth: 'install',
+    re: new RegExp(
+      `^/repos/${SEG}/${SEG}/actions/runs\\?status=(queued|in_progress)&per_page=\\d+$`,
+    ),
   },
   {
     method: 'GET',
@@ -397,6 +409,21 @@ export class RealGitHub implements GitHub {
     if (known > 0) out.required_checks = names;
     if (known === 1) out.partial = true;
     return out;
+  }
+
+  async getActivePrs(repo: string): Promise<number[] | null> {
+    const token = await this.adminReadToken();
+    const prs = new Set<number>();
+    for (const status of ['queued', 'in_progress']) {
+      const r = await this.req('GET', `/repos/${repo}/actions/runs?status=${status}&per_page=100`, {
+        kind: 'install',
+        token,
+      });
+      if (!r.ok) return null;
+      for (const run of ((await r.json()) as any).workflow_runs ?? [])
+        for (const pr of run.pull_requests ?? []) prs.add(pr.number);
+    }
+    return [...prs];
   }
 
   async ensureLabels(repo: string, labels: string[]) {
