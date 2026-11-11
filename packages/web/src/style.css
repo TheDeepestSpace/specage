@@ -82,6 +82,22 @@ input[type='search'] {
   background: var(--card);
   color: var(--fg);
 }
+input[type='search']:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid var(--acc);
+  outline-offset: 1px;
+}
+textarea {
+  width: 100%;
+  margin: 0.25rem 0;
+  padding: 0.35rem 0.6rem;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--card);
+  color: var(--fg);
+  font: inherit;
+  resize: vertical;
+}
 button,
 .btn {
   padding: 0.35rem 0.8rem;
@@ -265,7 +281,6 @@ pre {
   padding: 0 1rem;
 }
 .auth textarea {
-  width: 100%;
   font-family: ui-monospace, monospace;
 }
 .split {
@@ -615,12 +630,6 @@ body .cm-tooltip.cm-tooltip-autocomplete {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
-.threads textarea {
-  width: 100%;
-  box-sizing: border-box;
-  margin: 0.25rem 0;
-  font: inherit;
-}
 
 /* ---- planner questions ---- */
 .q-badge {
@@ -646,12 +655,6 @@ body .cm-tooltip.cm-tooltip-autocomplete {
   flex-wrap: wrap;
   gap: 0.3rem;
   margin: 0.3rem 0;
-}
-.q-thread textarea {
-  width: 100%;
-  box-sizing: border-box;
-  margin: 0.25rem 0;
-  font: inherit;
 }
 .setup {
   position: relative;
