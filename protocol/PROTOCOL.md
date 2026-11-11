@@ -33,7 +33,9 @@ Stop at the first rung that applies.
 6. **removed**: first, if the removal pairs with an added node that has a derived name (ID-less statements get a new name when reworded), compare old and new text. If the meaning is unchanged, treat it as cosmetic (rung 3): no action, and carry the old trace entry, evidence and claims over to the new derived name. If it changed, handle the pair as removed + added. Otherwise, if in-flight work exists, ask. Otherwise retire the ID, reconcile its undispatched or closed issues (see Reconcile existing issues) and note whether code for it still exists. Never delete code unprompted.
 7. **suspected_rename**: ask (question kind `rename`).
 
-Skip nodes marked `?` (open question) and `>later:`; list them in the report only.
+Skip nodes marked `>later:`; list them in the report only.
+
+Nodes marked `?` are questions to you, not work. When a `?` node is in the diff or sits in a changed scope (the containing node's subtree changed), read its text as a question and answer it in this run. Never file an issue or gap for the question itself, and never claim it. Answer in a thread on that node: reply to an existing open thread (`thread-events.yaml`, see Comment threads), or if none exists open a `questions.yaml` entry anchored on the `?` node and put the answer in its `thread`. Alternatively hand the follow-up to a dispatched worker (issue or `outbox/` entry) and say so in the reply. List answered `?` nodes in the report. `diff --json` includes `?` nodes with their normal hashes.
 
 Discovery is biased toward "implemented", so be strict:
 - Never write `verified`; only the human can.
