@@ -263,6 +263,34 @@ export async function renderEditor(root: HTMLElement, repo: string) {
     { decorations: (p) => p.decorations },
   );
 
+  // vertical ruler at column 100; lives in the scroller so it scrolls with the content
+  const RULER_COL = 100;
+  const ruler = ViewPlugin.fromClass(
+    class {
+      dom: HTMLElement;
+      constructor(readonly v: EditorView) {
+        this.dom = document.createElement('div');
+        this.dom.className = 'cm-ruler';
+        this.dom.setAttribute('aria-hidden', 'true');
+        v.scrollDOM.appendChild(this.dom);
+        this.place();
+      }
+      update(u: ViewUpdate) {
+        if (u.geometryChanged || u.docChanged || u.viewportChanged) this.place();
+      }
+      place() {
+        const v = this.v;
+        const line = v.contentDOM.querySelector('.cm-line');
+        const pad = line ? parseFloat(getComputedStyle(line).paddingLeft) || 0 : 0;
+        this.dom.style.left = `${v.contentDOM.offsetLeft + pad + RULER_COL * v.defaultCharacterWidth}px`;
+        this.dom.style.height = `${v.contentHeight}px`;
+      }
+      destroy() {
+        this.dom.remove();
+      }
+    },
+  );
+
   const enclosingBlockId = (a: Analysis, pos: number): string => {
     let k = -1;
     a.blocks.forEach((b, i) => {
@@ -564,6 +592,7 @@ export async function renderEditor(root: HTMLElement, repo: string) {
         folding,
         history(),
         highlight,
+        ruler,
         lintSource,
         lintGutter(),
         refTooltip,
