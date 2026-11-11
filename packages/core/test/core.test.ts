@@ -150,6 +150,15 @@ describe('diff', () => {
     const r = d('a @x; b @y;', 'a2 @x; c @z;');
     expect(r.entries.map((e) => e.kind).sort()).toEqual(['added', 'changed', 'removed']);
   });
+  it('surfaces ? question nodes with unchanged hashing', () => {
+    const base = 'a @p { x @p.x; };';
+    const r = d(base, 'a @p { x @p.x; ? why x @p.q; };');
+    expect(r.entries).toHaveLength(1);
+    expect(r.entries[0]).toMatchObject({ kind: 'added', id: 'p.q' });
+    const n = parse('a @p { ? why x @p.q; };').roots[0].children[0];
+    expect(n.marker).toEqual({ name: 'question' });
+    expect(n.hash).toBe(parse('a @p { ? why x @p.q; };').roots[0].children[0].hash);
+  });
   it('move only yields moved', () => {
     const r = d('p @p { c @p.c; }; q @q { };', 'p @p { }; q @q { c @p.c; };');
     expect(r.entries.map((e) => e.kind)).toEqual(['moved']);
