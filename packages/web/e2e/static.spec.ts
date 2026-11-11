@@ -73,3 +73,19 @@ test('works without localStorage', async ({ page }) => {
   await expect(page.locator('h1')).toHaveText('tbgwaf');
   await page.locator('details.block > summary').first().click();
 });
+
+test('work item issue and PR are links when repo is known', async ({ page }) => {
+  await page.goto(`${URL}#shoot.burst.cap`);
+  const w = page.locator('.work').first();
+  const issue = w.getByRole('link', { name: 'issue #251' });
+  await expect(issue).toHaveAttribute(
+    'href',
+    'https://github.com/TheDeepestSpace/tbgwaf/issues/251',
+  );
+  await expect(issue).toHaveAttribute('target', '_blank');
+  await expect(issue).toHaveAttribute('rel', /noopener/);
+  await expect(w.getByRole('link', { name: 'PR #254' })).toHaveAttribute(
+    'href',
+    'https://github.com/TheDeepestSpace/tbgwaf/pull/254',
+  );
+});

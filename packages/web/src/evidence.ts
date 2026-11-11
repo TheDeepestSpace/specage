@@ -62,3 +62,24 @@ export function evidenceView(e: Evidence, repo?: string): HTMLElement {
   }
   return li;
 }
+
+/** Work-item line: issue/PR numbers become links when the repo is known. */
+export function workRefs(
+  w: { issue?: number | null; pr?: number | null },
+  repo: string | undefined,
+  issueLabel = '#',
+): (Node | string)[] {
+  const out: (Node | string)[] = [];
+  const ref = (label: string, kind: 'issues' | 'pull', n: number) => {
+    out.push(' · ');
+    const href = repo ? safeUrl(`https://github.com/${repo}/${kind}/${n}`) : null;
+    out.push(
+      href
+        ? h('a', { href, target: '_blank', rel: 'noopener noreferrer', class: 'work-ref' }, label)
+        : label,
+    );
+  };
+  if (w.issue) ref(`${issueLabel}${w.issue}`, 'issues', w.issue);
+  if (w.pr) ref(`PR #${w.pr}`, 'pull', w.pr);
+  return out;
+}
