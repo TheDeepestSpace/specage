@@ -7,3 +7,5 @@ When you open a question about an issue, set `issue: <number>` so dispatch is he
 On every run, also enqueue outbox entries for filed issues never dispatched (`specage plan undispatched`), and run `specage question reanchor` before validating so no question points at a missing node.
 
 On every run, even when the spec diff has no entries (e.g. the commit only added a comment), run `specage threads pending <trail> --spec-dir <spec checkout>` and reply to each listed thread via `thread-events.yaml` (see Comment threads in the protocol). A comment-only commit is never "no action": commit the reply to the trail branch and advance the cursor.
+
+A `?` node in the diff or in a changed scope is a question to you: read its text and answer it in a thread on that node (reply to an existing thread, else open a `questions.yaml` entry anchored on it), or hand the follow-up to a dispatched worker (issue/outbox). Never file an issue for the question itself (see the protocol, Reconcile ladder).
