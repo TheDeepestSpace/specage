@@ -73,6 +73,11 @@ export class FakeGitHub implements GitHub {
   async getMergeFacts() {
     return this.mergeFacts;
   }
+  /** PRs with an active run; null = unreadable */
+  activePrs: number[] | null = [];
+  async getActivePrs() {
+    return this.activePrs;
+  }
   async ensureLabels(_r: string, labels: string[]) {
     if (this.noIssuesPermission) throw new PermissionError('grant Issues write');
     this.labels.push(...labels);

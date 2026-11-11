@@ -137,6 +137,27 @@ test('editor: only { auto-closes; ( and " insert no closing char', async () => {
   await page.keyboard.press('Control+z');
 });
 
+test('code panel draws a 100-column ruler', async () => {
+  await page.goto('/r/o/r');
+  await expect(page.locator('.cm-content')).toContainText('Limit magazine');
+  const ruler = page.locator('.cm-scroller > .cm-ruler');
+  await expect(ruler).toHaveCount(1);
+  const [rx, cx, pad, cw] = await page.evaluate(() => {
+    const r = document.querySelector('.cm-ruler') as HTMLElement;
+    const c = document.querySelector('.cm-content') as HTMLElement;
+    const l = document.querySelector('.cm-line') as HTMLElement;
+    const m = document.createElement('span');
+    m.textContent = 'x'.repeat(100);
+    m.style.cssText = 'position:absolute;visibility:hidden;white-space:pre';
+    l.appendChild(m);
+    const w = m.getBoundingClientRect().width / 100;
+    m.remove();
+    return [r.offsetLeft, c.offsetLeft, parseFloat(getComputedStyle(l).paddingLeft), w];
+  });
+  expect(Math.abs(rx - (cx + pad + 100 * cw))).toBeLessThan(2);
+  await page.screenshot({ path: 'test-results/ruler.png' });
+});
+
 test('editor: native spellcheck on for prose, off for ids/refs/markers', async () => {
   await page.goto('/r/o/r');
   const content = page.locator('.cm-content');
