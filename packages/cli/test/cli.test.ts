@@ -2,9 +2,11 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { buildDispatch } from '../src/dispatch.js';
 import { buildPlannerDispatch } from '@specage/core';
 import { decide, verifyPr, type PrFacts } from '../src/verify.js';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
+import { isBadNoreplyEmail } from '../src/util.js';
+import { readdirSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 const root = resolve(__dirname, '../../..');
@@ -403,6 +405,24 @@ describe('render', () => {
   });
 });
 
+describe('render with an invalid trace node', () => {
+  it('still renders, ignores only that node and records a warning', () => {
+    const st = join(tmp(), 'state');
+    cpSync(join(root, 'fixtures/tbgwaf/state'), st, { recursive: true });
+    const tp = join(st, 'trace.yaml');
+    const t = readFileSync(tp, 'utf8');
+    const m = t.match(/status: (implemented|planned|in_progress)/)!;
+    writeFileSync(tp, t.replace(m[0], 'status: partial'));
+    const out = join(tmp(), 'site');
+    const r = run(['render', '--spec', FIX, '--state', st, '--out', out, '--repo', 'o/r']);
+    expect(r.code, r.err).toBe(0);
+    const data = JSON.parse(readFileSync(join(out, 'data.json'), 'utf8'));
+    expect(data.warnings).toHaveLength(1);
+    expect(data.warnings[0]).toContain('trace.yaml');
+    expect(Object.keys(data.trace).length).toBeGreaterThan(0);
+  });
+});
+
 describe('bundle (what `npx github:...` runs)', () => {
   it('is self-contained: runs from a directory with no node_modules around it', () => {
     const dir = tmp();
@@ -570,5 +590,82 @@ describe('planner dispatch', () => {
     });
     expect(run(['callback', '--status', 'success', '--context', ctx]).code).toBe(0);
     expect(run(['callback', '--status', 'failure', '--context', ctx]).code).toBe(1);
+  });
+});
+
+describe('commit identity', () => {
+  it('flags noreply emails without a numeric id', () => {
+    for (const e of ['bot@users.noreply.github.com', 'specage-app[bot]@users.noreply.github.com'])
+      expect(isBadNoreplyEmail(e)).toBe(true);
+    for (const e of ['308992161+the-intern-bot[bot]@users.noreply.github.com', 't@t', ''])
+      expect(isBadNoreplyEmail(e)).toBe(false);
+  });
+  it('no checked-in workflow/action sets an id-less noreply email', () => {
+    const files = [
+      ...readdirSync(join(root, '.github/workflows')).map((f) =>
+        join(root, '.github/workflows', f),
+      ),
+      join(root, 'packages/action/publish/action.yml'),
+    ];
+    for (const f of files)
+      for (const m of readFileSync(f, 'utf8').matchAll(/[^\s"'=]+@users\.noreply\.github\.com/g))
+        expect(isBadNoreplyEmail(m[0].replace('${BOT_ID}', '1')), `${f}: ${m[0]}`).toBe(false);
+  });
+});
+
+describe('plan undispatched / question reanchor / state validate --spec', () => {
+  const setup = () => {
+    const d = tmp();
+    const spec = join(d, 's.specage');
+    writeFileSync(spec, 'Top @a { Mid @a.b; }; Lone @z;\n');
+    return { d, spec };
+  };
+  it('reanchors orphaned questions and validate flags them', () => {
+    const { d, spec } = setup();
+    writeFileSync(
+      join(d, 'questions.yaml'),
+      '- {id: q1, node: a.b.gone, dispatch: d, kind: reconcile, text: t, state: open}\n',
+    );
+    const v = run(['state', 'validate', d, '--spec', spec]);
+    expect(v.code).toBe(1);
+    expect(v.out).toContain('q1 references missing node');
+    expect(run(['question', 'reanchor', d, '--spec', spec, '--write']).code).toBe(0);
+    expect(readFileSync(join(d, 'questions.yaml'), 'utf8')).toContain('node: a.b');
+    expect(run(['state', 'validate', d, '--spec', spec]).code).toBe(0);
+  });
+  it('enqueues an implement entry once', () => {
+    const { d, spec } = setup();
+    const hash = JSON.parse(run(['hash', spec, '--json']).out).z.hash;
+    writeFileSync(
+      join(d, 'work.yaml'),
+      `items:\n  - {id: w1, issue: 19, state: filed, claims: {z: {hash: "${hash}", status: pending}}}\n`,
+    );
+    const r = run(['plan', 'undispatched', d, '--spec', spec, '--write']);
+    expect(r.code).toBe(0);
+    expect(r.out).toContain('#19');
+    const f = JSON.parse(readFileSync(join(d, 'outbox/ob-implement-19.json'), 'utf8'));
+    expect(f).toMatchObject({ kind: 'implement', target: 19, spec_ids: [`z@${hash}`] });
+    expect(run(['plan', 'undispatched', d, '--spec', spec]).out).toContain('nothing undispatched');
+  });
+});
+
+describe('threads pending', () => {
+  it('lists unanswered threads and drops answered ones', () => {
+    const d = tmp();
+    const sp = tmp();
+    writeFileSync(
+      join(sp, 'comments.yaml'),
+      'threads:\n  - {id: t-0001, node: a, node_hash: abcdef012345, state: open, comments: [{id: t-0001.1, author: me, at: "2026-01-01T00:00:00Z", body: why}]}\n',
+    );
+    const r = run(['threads', 'pending', d, '--spec-dir', sp]);
+    expect(r.code).toBe(0);
+    expect(r.out).toContain('t-0001 on a: me: why');
+    writeFileSync(
+      join(d, 'thread-events.yaml'),
+      '- {thread: t-0001, kind: reply, author: the-intern, at: "2026-01-02T00:00:00Z", body: because}\n',
+    );
+    expect(run(['threads', 'pending', d, '--spec-dir', sp]).out).toContain(
+      'no threads need a reply',
+    );
   });
 });

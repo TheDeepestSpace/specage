@@ -63,6 +63,9 @@ test('editor: sidebar with pinned node', async ({ page }) => {
   await page.locator('#pin').check();
   await expect(page.locator('#pin')).toBeChecked();
   await expect(page.locator('#pane')).toContainText('verified');
+  const work = page.locator('#pane li', { hasText: 'w-burst-cap' });
+  await expect(work).toContainText('PR #34 · in_review');
+  await expect(work).not.toContainText('pending');
   await expect(page).toHaveScreenshot('editor-pinned.png');
 });
 
@@ -213,4 +216,33 @@ test('comments: marker, thread popover, resolve/reopen filter, new thread', asyn
   await panel.locator('textarea').last().fill('Another thought');
   await panel.locator('#new-thread').click();
   await expect(panel).toContainText('Another thought');
+});
+
+const FIX_AM = 'Settings → General → Pull Requests: enable "Allow auto-merge".';
+const FIX_GATE =
+  'Settings → Branches (or Rules): require the status check "ci-gate" on the default branch.';
+
+test('editor: no setup badge once auto-merge is configured', async ({ page }) => {
+  await openEditor(page);
+  await expect(page.locator('.setup-badge')).toHaveCount(0);
+});
+
+test('editor: setup warning (missing)', async ({ page }) => {
+  await mockApi(page, {
+    setup: { auto_merge: 'missing', gate: 'missing', fix: [FIX_AM, FIX_GATE], ready: false },
+  });
+  await page.goto('/r/acme/tbgwaf');
+  await page.locator('.setup-badge').click();
+  await expect(page.locator('.setup-pop')).toContainText('Allow auto-merge: missing');
+  await expect(page).toHaveScreenshot('setup-missing.png');
+});
+
+test('editor: setup warning (unverified)', async ({ page }) => {
+  await mockApi(page, {
+    setup: { auto_merge: 'unverified', gate: 'unverified', fix: [FIX_AM, FIX_GATE], ready: false },
+  });
+  await page.goto('/r/acme/tbgwaf');
+  await page.locator('.setup-badge').click();
+  await expect(page.locator('.setup-pop')).toContainText('unverified');
+  await expect(page).toHaveScreenshot('setup-unverified.png');
 });

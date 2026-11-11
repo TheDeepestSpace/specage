@@ -9,6 +9,7 @@ import {
   type GitHub,
   type RepoInfo,
 } from './github.js';
+import type { MergeFacts } from './setup.js';
 
 export const SPEC0 = 'Shoot a burst @shoot.burst;\nLimit magazine @shoot.cap;\n';
 export class FakeGitHub implements GitHub {
@@ -66,6 +67,16 @@ export class FakeGitHub implements GitHub {
   }
   async getRepo(repo: string) {
     return this.repos.find((r) => r.full_name === repo) ?? null;
+  }
+  /** facts returned for any repo; tests tweak these */
+  mergeFacts: MergeFacts = { allow_auto_merge: true, required_checks: ['ci-gate'] };
+  async getMergeFacts() {
+    return this.mergeFacts;
+  }
+  /** PRs with an active run; null = unreadable */
+  activePrs: number[] | null = [];
+  async getActivePrs() {
+    return this.activePrs;
   }
   async ensureLabels(_r: string, labels: string[]) {
     if (this.noIssuesPermission) throw new PermissionError('grant Issues write');

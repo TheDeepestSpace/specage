@@ -83,5 +83,33 @@ export function mergeThreads(threads: Thread[], events: ThreadEvent[] = []): Thr
       delete t.resolved_at;
     }
   }
+  for (const t of out) sortComments(t.comments);
   return out;
+}
+
+/** Stable sort by timestamp (ties keep original order). */
+function sortComments(cs: Thread['comments']): void {
+  const key = (at: string) => {
+    const n = Date.parse(at);
+    return Number.isNaN(n) ? 0 : n;
+  };
+  const idx = new Map(cs.map((c, i) => [c, i]));
+  cs.sort((a, b) => key(a.at) - key(b.at) || idx.get(a)! - idx.get(b)!);
+}
+
+export const AGENT_AUTHOR = 'the-intern';
+
+/**
+ * Open threads that still need an agent reply: after folding in agent events, the last comment is not
+ * from the agent. Answered threads drop out, so re-running a dispatch never re-answers (idempotent).
+ */
+export function pendingThreads(
+  threads: Thread[],
+  events: ThreadEvent[] = [],
+  agent = AGENT_AUTHOR,
+): Thread[] {
+  return mergeThreads(threads, events).filter((t) => {
+    const last = t.comments[t.comments.length - 1];
+    return t.state === 'open' && !!last && last.author !== agent;
+  });
 }

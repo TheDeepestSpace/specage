@@ -1,8 +1,10 @@
+import YAML from 'yaml';
 import { describe, expect, it } from 'vitest';
 import { RealGitHub, ALLOWED } from '../src/github.js';
 import { seal, unseal } from '../src/seal.js';
 import { challengeText, verifySshsig, signupNamespace, SshsigError } from '../src/sshsig.js';
 import { loadEnv } from '../src/env.js';
+import { evaluateSetup } from '../src/setup.js';
 import { FakeGitHub, ORIGIN, SPEC0, SoftAuthenticator, harness, sshKey } from './helpers.js';
 import { generateKeyPairSync } from 'node:crypto';
 
@@ -270,6 +272,34 @@ describe('API', () => {
     expect((await h.req('GET', '/api/r/o/other/spec')).status).toBe(404);
     expect((await h.req('GET', '/api/r/o/..%2Fx/spec')).status).toBe(400);
   });
+  it('state exposes active_nodes for in_progress work with an active run', async () => {
+    let skew = 0;
+    const h = harness({ now: () => Date.now() + skew });
+    await h.signup(auth());
+    const gh = h.github;
+    const hash = 'a'.repeat(12);
+    const item = (id: string, pr: number, state: string) => ({
+      id,
+      issue: pr,
+      pr,
+      state,
+      claims: { [`n-${id}`]: { hash, status: 'pending' } },
+    });
+    gh.files[`${'specages/r/trail'}:work.yaml`] = YAML.stringify({
+      items: [
+        item('w1', 1, 'in_progress'),
+        item('w2', 2, 'in_progress'),
+        item('w3', 3, 'in_review'),
+      ],
+    });
+    const get = async () =>
+      ((await (await h.req('GET', '/api/r/o/r/state')).json()) as any).active_nodes;
+    gh.activePrs = [1, 3];
+    expect(await get()).toEqual(['n-w1']);
+    gh.activePrs = null; // runs unreadable: fall back to in_progress work items
+    skew = 31_000;
+    expect(await get()).toEqual(['n-w1', 'n-w2']);
+  });
   it('save: 422 on lint errors, 409 on conflict, ok otherwise, author header', async () => {
     const h = harness();
     await h.signup(auth());
@@ -347,6 +377,66 @@ describe('API', () => {
       { 'x-specage': '' },
     );
     expect(noCsrf.status).toBe(403);
+  });
+  it('questions: every option type (colons, backticks, free text) round-trips', async () => {
+    const h = harness();
+    await h.signup(auth());
+    const key = 'specages/r/trail:questions.yaml';
+    const opts = [
+      'yes: carry trace/claims, retire `s-43c9243d`',
+      'no: keep `s-43c9243d` as is: separate node',
+    ];
+    h.github.files[key] = YAML.stringify(
+      ['a', 'b', 'c', 'd', 'e'].map((x) => ({
+        id: `q-${x}`,
+        node: '',
+        dispatch: 'd',
+        kind: 'reconcile',
+        text: 'Retire `s-43c9243d`: same thing?',
+        options: opts,
+        state: 'open',
+      })),
+    );
+    const post = (b: unknown) => h.req('POST', '/api/r/o/r/questions', b);
+    expect((await post({ id: 'q-a', choice: 'withdraw' })).status).toBe(200);
+    expect((await post({ id: 'q-b', choice: 'keep' })).status).toBe(200);
+    expect((await post({ id: 'q-c', body: opts[0] })).status).toBe(200);
+    expect((await post({ id: 'q-d', body: opts[1] })).status).toBe(200);
+    expect(
+      (await post({ id: 'q-e', body: 'free: text with `ticks` and # hash\nline 2' })).status,
+    ).toBe(200);
+    const st = (await (await h.req('GET', '/api/r/o/r/state')).json()) as any;
+    const bodies = st.questions.map((q: any) => q.thread[0].body);
+    expect(bodies).toEqual([
+      'Withdraw the issue.',
+      'Keep the issue.',
+      opts[0],
+      opts[1],
+      'free: text with `ticks` and # hash\nline 2',
+    ]);
+    expect(st.questions.every((q: any) => q.state === 'open')).toBe(true);
+  });
+  it('questions: expected failures are 4xx with a message; GitHub failures are 502', async () => {
+    const h = harness();
+    await h.signup(auth());
+    const key = 'specages/r/trail:questions.yaml';
+    const post = (b: unknown) => h.req('POST', '/api/r/o/r/questions', b);
+    h.github.files[key] = '- {id: q-1, dispatch: d, kind: reconcile, text: t, state: open}\n';
+    const long = await post({ id: 'q-1', body: 'x'.repeat(4001) });
+    expect(long.status).toBe(400);
+    expect(((await long.json()) as any).error).toMatch(/4000/);
+    expect((await post({ id: 'q-1', body: 5 })).status).toBe(400);
+    h.github.files[key] = '{not: [a list';
+    expect((await post({ id: 'q-1', body: 'x' })).status).toBe(422);
+    h.github.files[key] = '- {id: q-1, dispatch: d, kind: reconcile, text: t, state: open}\n';
+    const getFile = h.github.getFile.bind(h.github);
+    h.github.getFile = async (path: string, ref: string) => {
+      if (path === 'questions.yaml') throw new Error('GitHub 502');
+      return getFile(path, ref);
+    };
+    const r = await post({ id: 'q-1', body: 'x' });
+    expect(r.status).toBe(502);
+    expect(((await r.json()) as any).error).toMatch(/GitHub/);
   });
   it('a save commits to the spec branch and leaves the cursor alone', async () => {
     const h = harness();
@@ -473,13 +563,13 @@ describe('GitHub access', () => {
         u.pathname.includes('/specages/new/')
       )
         return j({}, 404);
-      if (u.pathname.endsWith('/git/ref/heads/specages/r/spec'))
+      if (/\/git\/ref\/heads\/specages\/r\/(spec|trail)$/.test(u.pathname))
         return j({ object: { sha: 'a'.repeat(40) } });
       if (u.pathname.includes('/git/commits/')) return j({ tree: { sha: 't' } });
       if (u.pathname.endsWith('/git/blobs')) return j({ sha: 'b' });
       if (u.pathname.endsWith('/git/trees')) return j({ sha: 't2' });
       if (u.pathname.endsWith('/git/commits')) return j({ sha: 'c'.repeat(40) });
-      if (u.pathname.endsWith('/git/refs/heads/specages/r/spec')) return j({});
+      if (/\/git\/refs\/heads\/specages\/r\/(spec|trail)$/.test(u.pathname)) return j({});
       if (u.pathname.endsWith('/git/refs')) return j({});
       if (u.pathname.includes('matching-refs/heads/specages/'))
         return j([{ ref: 'refs/heads/specages/r/spec' }, { ref: 'refs/heads/specages/r/trail' }]);
@@ -529,6 +619,7 @@ describe('GitHub access', () => {
       message: 'm',
       parentSha: 'a'.repeat(40),
     });
+    await gh.commitTrail('r', { path: 'questions.yaml', content: 'x', message: 'm' });
     expect(log.length).toBeGreaterThan(8);
     for (const l of log)
       expect(
@@ -570,7 +661,7 @@ describe('GitHub access', () => {
     await expect(
       (gh as any).req(
         'PATCH',
-        '/repos/o/specage-data/git/refs/heads/specages/r/trail',
+        '/repos/o/specage-data/git/refs/heads/specages/r/other',
         { kind: 'install', token: 't' },
         {},
       ),
@@ -637,5 +728,45 @@ describe('env', () => {
   it('requires https and a 32 byte secret in production', () => {
     expect(() => loadEnv({ ...base, PUBLIC_URL: 'http://x.fly.dev' })).toThrow(/https/);
     expect(() => loadEnv({ ...base, SESSION_SECRET: 'AAAA' })).toThrow(/32 bytes/);
+  });
+});
+
+describe('auto-merge setup detection', () => {
+  const f = (allow_auto_merge: boolean | null, required_checks: string[] | null, partial = false) =>
+    evaluateSetup({ allow_auto_merge, required_checks, partial });
+  it('ready only when auto-merge is on and ci-gate is required', () => {
+    expect(f(true, ['ci-gate', 'test'])).toMatchObject({ ready: true, fix: [] });
+    expect(f(false, ['ci-gate'])).toMatchObject({
+      auto_merge: 'missing',
+      gate: 'ok',
+      ready: false,
+    });
+    expect(f(true, ['test'])).toMatchObject({ auto_merge: 'ok', gate: 'missing', ready: false });
+    expect(f(true, [])).toMatchObject({ gate: 'missing' });
+  });
+  it('unreadable settings are unverified, not missing', () => {
+    expect(f(null, null)).toMatchObject({ auto_merge: 'unverified', gate: 'unverified' });
+    expect(f(true, ['test'], true).gate).toBe('unverified'); // only one of protection/rulesets readable
+    expect(f(true, ['ci-gate'], true).gate).toBe('ok');
+    expect(f(null, null).fix).toHaveLength(2);
+  });
+  it('GET /api/r/:o/:r/setup reflects GitHub and degrades to unverified on errors', async () => {
+    const h = harness();
+    await h.signup(auth());
+    h.github.mergeFacts = { allow_auto_merge: false, required_checks: ['test'] };
+    expect(await (await h.req('GET', '/api/r/o/r/setup')).json()).toMatchObject({
+      auto_merge: 'missing',
+      gate: 'missing',
+      ready: false,
+    });
+    h.github.mergeFacts = { allow_auto_merge: true, required_checks: ['ci-gate'] };
+    expect(await (await h.req('GET', '/api/r/o/r/setup')).json()).toMatchObject({ ready: true });
+    h.github.getMergeFacts = async () => {
+      throw new Error('boom');
+    };
+    expect(await (await h.req('GET', '/api/r/o/r/setup')).json()).toMatchObject({
+      auto_merge: 'unverified',
+      gate: 'unverified',
+    });
   });
 });

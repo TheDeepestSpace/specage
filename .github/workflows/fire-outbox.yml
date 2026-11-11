@@ -29,14 +29,14 @@ jobs:
           [[ "$REPO" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] || { echo "bad repo"; exit 1; }
           [[ "$SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "bad sha"; exit 1; }
           [[ "$PROJECT" =~ ^[A-Za-z0-9_.-]+$ ]] || { echo "bad project"; exit 1; }
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with: {node-version: 22, cache: npm}
       - run: npm ci --ignore-scripts
       - run: npx tsc -b packages/core packages/cli
       # specage App token: Contents rw on the data repo, Actions write on the-intern.
       - id: app
-        uses: actions/create-github-app-token@v2
+        uses: actions/create-github-app-token@v3
         with:
           app-id: ${{ secrets.SPECAGE_APP_ID }}
           private-key: ${{ secrets.SPECAGE_APP_PRIVATE_KEY }}
@@ -69,5 +69,6 @@ jobs:
         run: |
           cd "$RUNNER_TEMP/trail"
           git diff --quiet -- outbox && { echo "nothing fired"; exit 0; }
-          git config user.name "specage-app[bot]"; git config user.email "specage-app[bot]@users.noreply.github.com"
+          SLUG="${{ steps.app.outputs.app-slug }}"; BOT_ID=$(gh api "users/${SLUG}%5Bbot%5D" --jq .id)
+          git config user.name "${SLUG}[bot]"; git config user.email "${BOT_ID}+${SLUG}[bot]@users.noreply.github.com"
           node "$GITHUB_WORKSPACE/packages/cli/dist/bin.js" state commit -m "outbox: mark fired" --dir .

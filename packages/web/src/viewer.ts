@@ -1,6 +1,6 @@
 import type { NodeView, SpecData } from '@specage/core/browser';
 import { evidenceView } from './evidence.js';
-import { h, safeUrl, store } from './dom.js';
+import { h, safeUrl, store, warningBanner } from './dom.js';
 import { byFilter, openCount, threadView, type ThreadFilter } from './threads.js';
 
 export const STATUS_LABEL: Record<string, string> = {
@@ -104,6 +104,7 @@ export function renderViewer(root: HTMLElement, data: SpecData) {
     editUrl ? h('a', { class: 'btn', href: editUrl }, 'Edit') : null,
   );
   root.replaceChildren(header);
+  if (data.warnings?.length) root.append(warningBanner(data.warnings));
   if (data.report)
     root.append(
       h(
@@ -157,7 +158,7 @@ export function renderViewer(root: HTMLElement, data: SpecData) {
         h(
           'div',
           { class: 'work' },
-          `${w.id}${w.issue ? ` · issue #${w.issue}` : ''}${w.pr ? ` · PR #${w.pr}` : ''} · ${w.state} · claim ${c.status}${c.hash !== n.hash ? ' (stale hash)' : ''}`,
+          `${w.id}${w.issue ? ` · issue #${w.issue}` : ''}${w.pr ? ` · PR #${w.pr}` : ''} · ${w.state}${c.hash !== n.hash ? ' (stale hash)' : ''}`,
         ),
       );
     }

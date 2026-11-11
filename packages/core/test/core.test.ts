@@ -8,10 +8,17 @@ import {
   normalize,
   sha12,
   anchorQuestion,
+  pendingThreads,
+  orphanedQuestions,
+  reanchorQuestions,
+  undispatchedItems,
+  implementEntry,
   answerQuestion,
   dispatchBlocked,
   QuestionSchema,
   QuestionError,
+  buildIssueBody,
+  buildPlannerDispatch,
 } from '../src/index.js';
 
 const fixture = readFileSync(
@@ -143,6 +150,15 @@ describe('diff', () => {
     const r = d('a @x; b @y;', 'a2 @x; c @z;');
     expect(r.entries.map((e) => e.kind).sort()).toEqual(['added', 'changed', 'removed']);
   });
+  it('surfaces ? question nodes with unchanged hashing', () => {
+    const base = 'a @p { x @p.x; };';
+    const r = d(base, 'a @p { x @p.x; ? why x @p.q; };');
+    expect(r.entries).toHaveLength(1);
+    expect(r.entries[0]).toMatchObject({ kind: 'added', id: 'p.q' });
+    const n = parse('a @p { ? why x @p.q; };').roots[0].children[0];
+    expect(n.marker).toEqual({ name: 'question' });
+    expect(n.hash).toBe(parse('a @p { ? why x @p.q; };').roots[0].children[0].hash);
+  });
   it('move only yields moved', () => {
     const r = d('p @p { c @p.c; }; q @q { };', 'p @p { }; q @q { c @p.c; };');
     expect(r.entries.map((e) => e.kind)).toEqual(['moved']);
@@ -256,6 +272,20 @@ describe('yaml hashes', () => {
   });
 });
 
+describe('parseState tolerance', () => {
+  it('drops only the invalid trace node and reports it', () => {
+    const { state, issues } = parseState({
+      trace: parseYaml(
+        'nodes:\n  a: {spec_hash: 123456789012, status: partial}\n  b: {spec_hash: 123456789013, status: planned}',
+      ),
+    });
+    expect(Object.keys(state.trace.nodes)).toEqual(['b']);
+    expect(issues).toHaveLength(1);
+    expect(issues[0].file).toBe('trace.yaml');
+    expect(issues[0].message).toContain('nodes.a.status');
+  });
+});
+
 describe('$id references', () => {
   const src = 'frontend @fe; $fe is hosted on GH Pages @infra; costs $5 and $Home @x;';
   it('extracts refs', () => {
@@ -351,6 +381,28 @@ describe('comment threads', () => {
     expect(m[0].comments.at(-1)).toMatchObject({ author: 'agent', body: 'done' });
     expect(m[0]).toMatchObject({ state: 'resolved', resolved_by: 'agent' });
   });
+  it('orders interleaved human and agent comments by time', () => {
+    let t = applyOp(
+      [],
+      { op: 'create', node: 'a.b', node_hash: '', body: 'one' },
+      'u',
+      '2026-01-01T01:00:00Z',
+      {
+        'a.b': 'h',
+      },
+    );
+    t = applyOp(
+      t,
+      { op: 'reply', thread: 't-0001', body: 'three' },
+      'u',
+      '2026-01-01T03:00:00Z',
+      {},
+    );
+    const m = mergeThreads(t, [
+      { thread: 't-0001', kind: 'reply', author: 'bot', at: '2026-01-01T02:00:00Z', body: 'two' },
+    ]);
+    expect(m[0].comments.map((c) => c.body)).toEqual(['one', 'two', 'three']);
+  });
 });
 
 describe('planner questions', () => {
@@ -414,5 +466,151 @@ describe('planner questions', () => {
       QuestionSchema.parse({ id: 'q', dispatch: 'd', kind: 'split', text: 't', state: 'open' })
         .node,
     ).toBe('');
+  });
+});
+
+describe('reconcile helpers', () => {
+  const spec = parse('Top @a { Mid @a.b; }; Lone @z;');
+  const hashes = Object.fromEntries(flatten(spec).map((n) => [n.id, n.hash]));
+  const mk = (id: string, node: string, extra: any = {}) =>
+    QuestionSchema.parse({
+      id,
+      node,
+      dispatch: 'd',
+      kind: 'reconcile',
+      text: 't',
+      state: 'open',
+      ...extra,
+    });
+
+  it('re-anchors orphaned questions to the nearest existing ancestor, else top-level', () => {
+    const qs = [
+      mk('q1', 'a.b.c.d', { node_hash: 'aaaaaaaaaaaa' }),
+      mk('q2', 'gone.x'),
+      mk('q3', 'a.b'),
+      mk('q4', ''),
+    ];
+    expect(orphanedQuestions(qs, spec).map((q) => q.id)).toEqual(['q1', 'q2']);
+    const r = reanchorQuestions(qs, spec);
+    expect(r.questions.map((q) => q.node)).toEqual(['a.b', '', 'a.b', '']);
+    expect(r.questions[0].node_hash).toBe(hashes['a.b']);
+    expect(r.questions[1].node_hash).toBeUndefined();
+    expect(r.changed).toHaveLength(2);
+    // idempotent, and nothing is orphaned afterwards
+    expect(reanchorQuestions(r.questions, spec).changed).toEqual([]);
+    expect(orphanedQuestions(r.questions, spec)).toEqual([]);
+  });
+  it('uses the old tree when given (non-dotted ids)', () => {
+    const old = parse('P @p { C @c; };');
+    const now = parse('P @p;');
+    expect(reanchorQuestions([mk('q', 'c')], now, old).questions[0].node).toBe('p');
+  });
+
+  const item = (o: any) => ({
+    id: 'w',
+    issue: 1,
+    pr: null,
+    state: 'filed',
+    relations: [],
+    claims: { z: { hash: hashes.z, status: 'pending' } },
+    ...o,
+  });
+  const run = (w: any, outbox: any[] = [], qs: any[] = []) =>
+    undispatchedItems({ items: [item(w)] } as any, outbox, qs, spec);
+  it('finds filed issues with no outbox entry, no PR, no open question, fresh claims', () => {
+    const r = run({});
+    expect(r).toEqual([{ issue: 1, work_id: 'w', spec_ids: [`z@${hashes.z}`] }]);
+    expect(implementEntry(r[0], 'now')).toMatchObject({ kind: 'implement', target: 1, body: '' });
+  });
+  it('skips fired/queued, in-flight, gated, stale and orphaned ones', () => {
+    expect(run({}, [{ target: 1 }])).toEqual([]);
+    expect(run({ pr: 5 })).toEqual([]);
+    expect(run({ state: 'in_progress' })).toEqual([]);
+    expect(run({}, [], [mk('q', 'z', { issue: 1 })])).toEqual([]);
+    expect(run({}, [], [mk('q', 'z', { issue: 1, state: 'resolved' })])).toHaveLength(1);
+    expect(run({ claims: { z: { hash: 'bbbbbbbbbbbb', status: 'pending' } } })).toEqual([]);
+    expect(run({ claims: { nope: { hash: hashes.z, status: 'pending' } } })).toEqual([]);
+  });
+});
+
+describe('enriched issue body', () => {
+  const base = {
+    summary: 'Do the thing',
+    spec_commit: 'a'.repeat(40),
+    claims: [{ id: 'x.y', hash: 'abc123def456', text: 'The system MUST do\nthe thing.' }],
+  };
+  it('quotes spec verbatim and keeps trailer instructions', () => {
+    const b = buildIssueBody(base);
+    expect(b).toContain('  > The system MUST do\n  > the thing.');
+    expect(b).toContain('`x.y@abc123def456`');
+    expect(b).toContain('Add `Spec: x.y@abc123def456`');
+    expect(b).toContain('Tests required');
+  });
+  it('renders enrichment, bounded, with UI screenshots', () => {
+    const b = buildIssueBody({
+      ...base,
+      binding: [{ id: 'c.1', kind: 'constraint', text: 'No deps' }],
+      enrichment: {
+        files: Array.from({ length: 20 }, (_, i) => `f${i}.ts`),
+        criteria: ['z'.repeat(1000)],
+        ui: true,
+      },
+    });
+    expect(b).toContain('`c.1` (constraint): No deps');
+    expect(b).toContain('- f7.ts');
+    expect(b).not.toContain('f8.ts');
+    expect(b).toContain('…');
+    expect(b).toContain('screenshots');
+  });
+  it('rejects empty claims', () => {
+    expect(() => buildIssueBody({ ...base, claims: [] })).toThrow();
+  });
+  it('planner dispatch grants read on the code repo', () => {
+    const d: any = buildPlannerDispatch({
+      repo: 'o/code',
+      data_repo: 'o/data',
+      specage_repo: 'o/specage',
+      prompt_ref: 'main',
+      project: 'p',
+      before: null,
+      after: 'b'.repeat(40),
+    });
+    expect(d.access).toContainEqual({ repo: 'o/code', scope: 'read' });
+  });
+});
+
+describe('pendingThreads', () => {
+  const th = (id: string, authors: string[], state: 'open' | 'resolved' = 'open') => ({
+    id,
+    node: 'a',
+    node_hash: 'h',
+    state,
+    comments: authors.map((author, i) => ({
+      id: `${id}.${i + 1}`,
+      author,
+      at: `2026-01-0${i + 1}T00:00:00Z`,
+      body: 'b',
+    })),
+  });
+  it('lists open threads with an unanswered human comment', () => {
+    const threads = [
+      th('t-0001', ['me']),
+      th('t-0002', ['me', 'the-intern']),
+      th('t-0003', ['me'], 'resolved'),
+    ];
+    expect(pendingThreads(threads).map((t) => t.id)).toEqual(['t-0001']);
+  });
+  it('is idempotent once a reply event exists, and re-opens on a newer human comment', () => {
+    const ev = [
+      {
+        thread: 't-0001',
+        kind: 'reply' as const,
+        author: 'the-intern',
+        at: '2026-02-01T00:00:00Z',
+        body: 'ok',
+      },
+    ];
+    expect(pendingThreads([th('t-0001', ['me'])], ev)).toEqual([]);
+    expect(pendingThreads([th('t-0001', ['me', 'the-intern', 'me'])], [])).toHaveLength(1);
   });
 });

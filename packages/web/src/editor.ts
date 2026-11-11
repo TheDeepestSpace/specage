@@ -38,9 +38,17 @@ import {
 import { Vim, getCM, vim } from '@replit/codemirror-vim';
 import { diff as coreDiff, lint, parse, type State, type Thread } from '@specage/core/browser';
 import { api, ApiError, loadMe } from './api.js';
-import { analyse, dotStatus, nodeAtLine, slug, type Analysis } from './analysis.js';
+import {
+  analyse,
+  dotClass,
+  dotPulse,
+  dotStatus,
+  nodeAtLine,
+  slug,
+  type Analysis,
+} from './analysis.js';
 import { conflictDialog } from './conflict.js';
-import { h, store } from './dom.js';
+import { h, setupBadge, store, warningBanner, type SetupInfo } from './dom.js';
 import grammarSrc from '../../../protocol/GRAMMAR.md?raw';
 import { renderMarkdown } from './markdown.js';
 import { openFor } from './questions.js';
@@ -68,12 +76,16 @@ export async function renderEditor(root: HTMLElement, repo: string) {
   }
   let spec: { content: string; head_sha: string; path: string };
   let state: State = emptyState();
+  let active = new Set<string>();
   let threads: Thread[] = [];
+  let warnings: string[] = [];
   try {
     [spec, state] = await Promise.all([
       api('GET', `/api/r/${repo}/spec`),
       api('GET', `/api/r/${repo}/state`).then((s: any) => {
         threads = s.threads ?? [];
+        warnings = s.warnings ?? [];
+        active = new Set<string>(s.active_nodes ?? []);
         return {
           trace: s.trace,
           work: s.work,
@@ -99,15 +111,18 @@ export async function renderEditor(root: HTMLElement, repo: string) {
   });
 
   class Dot extends GutterMarker {
-    constructor(readonly status: string) {
+    constructor(
+      readonly status: string,
+      readonly pulse = false,
+    ) {
       super();
     }
     eq(o: Dot) {
-      return o.status === this.status;
+      return o.status === this.status && o.pulse === this.pulse;
     }
     toDOM() {
       const s = document.createElement('span');
-      s.className = `dot st-${this.status}`;
+      s.className = dotClass(this.status, this.pulse);
       s.title = this.status.replace('_', ' ');
       s.dataset.status = this.status;
       return s;
@@ -118,7 +133,7 @@ export async function renderEditor(root: HTMLElement, repo: string) {
     lineMarker(view, line) {
       const a = view.state.field(analysisField);
       const n = a.byLine.get(view.state.doc.lineAt(line.from).number);
-      return n && n.id ? new Dot(dotStatus(n, state)) : null;
+      return n && n.id ? new Dot(dotStatus(n, state), dotPulse(n, state, active)) : null;
     },
     lineMarkerChange: (u) => u.transactions.some((t) => t.effects.some((e) => e.is(setState))),
     initialSpacer: () => new Dot('unknown'),
@@ -235,11 +250,45 @@ export async function renderEditor(root: HTMLElement, repo: string) {
         for (const [re, cls] of decoRe)
           for (const m of text.matchAll(re))
             if (m[0])
-              out.push(Decoration.mark({ class: cls }).range(m.index!, m.index! + m[0].length));
+              out.push(
+                Decoration.mark({
+                  class: cls,
+                  // only prose is spellchecked: ids, $refs, markers and escapes are not
+                  ...(cls === 'cm-spec-comment' ? {} : { attributes: { spellcheck: 'false' } }),
+                }).range(m.index!, m.index! + m[0].length),
+              );
         return Decoration.set(out, true);
       }
     },
     { decorations: (p) => p.decorations },
+  );
+
+  // vertical ruler at column 100; lives in the scroller so it scrolls with the content
+  const RULER_COL = 100;
+  const ruler = ViewPlugin.fromClass(
+    class {
+      dom: HTMLElement;
+      constructor(readonly v: EditorView) {
+        this.dom = document.createElement('div');
+        this.dom.className = 'cm-ruler';
+        this.dom.setAttribute('aria-hidden', 'true');
+        v.scrollDOM.appendChild(this.dom);
+        this.place();
+      }
+      update(u: ViewUpdate) {
+        if (u.geometryChanged || u.docChanged || u.viewportChanged) this.place();
+      }
+      place() {
+        const v = this.v;
+        const line = v.contentDOM.querySelector('.cm-line');
+        const pad = line ? parseFloat(getComputedStyle(line).paddingLeft) || 0 : 0;
+        this.dom.style.left = `${v.contentDOM.offsetLeft + pad + RULER_COL * v.defaultCharacterWidth}px`;
+        this.dom.style.height = `${v.contentHeight}px`;
+      }
+      destroy() {
+        this.dom.remove();
+      }
+    },
   );
 
   const enclosingBlockId = (a: Analysis, pos: number): string => {
@@ -415,24 +464,37 @@ export async function renderEditor(root: HTMLElement, repo: string) {
     editorEl,
     grammarEl,
   );
+  const setupSlot = h('span', { class: 'setup-slot' });
+  // non-blocking: the badge appears only when auto-merge isn't fully set up (clears on next load once fixed)
+  api('GET', `/api/r/${repo}/setup`)
+    .then((s: SetupInfo) => {
+      const b = setupBadge(s);
+      setupSlot.replaceChildren(...(b ? [b] : []));
+      fitTop();
+    })
+    .catch(() => {});
   root.replaceChildren(
     h(
       'header',
       { class: 'top' },
       h('h1', {}, repo),
       h('a', { href: '/' }, 'repos'),
+      setupSlot,
       status,
       h('label', { class: 'toggle', title: 'Vim keybindings' }, vimBox, 'Vim'),
       vimMode,
       saveBtn,
     ),
+    ...(warnings.length ? [warningBanner(warnings)] : []),
     diagBox,
     h('div', { class: 'split' }, editorCol, paneEl),
   );
 
   // the split fills the viewport below the (possibly wrapped) header
   const topEl = root.querySelector('header.top') as HTMLElement;
-  const fitTop = () => root.style.setProperty('--top-h', `${topEl.offsetHeight}px`);
+  const bannerEl = root.querySelector('.banner-warn') as HTMLElement | null;
+  const fitTop = () =>
+    root.style.setProperty('--top-h', `${topEl.offsetHeight + (bannerEl?.offsetHeight ?? 0)}px`);
   fitTop();
   addEventListener('resize', fitTop);
 
@@ -530,6 +592,7 @@ export async function renderEditor(root: HTMLElement, repo: string) {
         folding,
         history(),
         highlight,
+        ruler,
         lintSource,
         lintGutter(),
         refTooltip,
@@ -576,7 +639,8 @@ export async function renderEditor(root: HTMLElement, repo: string) {
           }
           if (u.docChanged) refreshButtons();
         }),
-        EditorView.contentAttributes.of({ 'aria-label': 'Spec editor' }),
+        // native browser spellcheck: red wavy underline on misspelled words, no text/caret changes
+        EditorView.contentAttributes.of({ 'aria-label': 'Spec editor', spellcheck: 'true' }),
       ],
     }),
   });

@@ -82,6 +82,22 @@ input[type='search'] {
   background: var(--card);
   color: var(--fg);
 }
+input[type='search']:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid var(--acc);
+  outline-offset: 1px;
+}
+textarea {
+  width: 100%;
+  margin: 0.25rem 0;
+  padding: 0.35rem 0.6rem;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--card);
+  color: var(--fg);
+  font: inherit;
+  resize: vertical;
+}
 button,
 .btn {
   padding: 0.35rem 0.8rem;
@@ -230,6 +246,20 @@ pre {
 .st-in_progress {
   background: var(--c-in_progress);
 }
+.dot.pulse {
+  animation: dot-pulse 1.4s ease-in-out infinite;
+}
+@keyframes dot-pulse {
+  50% {
+    opacity: 0.35;
+    transform: scale(0.8);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .dot.pulse {
+    animation: none;
+  }
+}
 .st-implemented {
   background: var(--c-implemented);
 }
@@ -251,7 +281,6 @@ pre {
   padding: 0 1rem;
 }
 .auth textarea {
-  width: 100%;
   font-family: ui-monospace, monospace;
 }
 .split {
@@ -362,6 +391,14 @@ pre {
 }
 .cm-editor .cm-line {
   padding: 0 0.75rem 0 0.9rem; /* breathing room between gutter and text */
+}
+.cm-editor .cm-ruler {
+  position: absolute;
+  top: 0;
+  width: 1px;
+  background: var(--line);
+  pointer-events: none;
+  z-index: 0;
 }
 .cm-editor .cm-gutters {
   flex-shrink: 0;
@@ -497,6 +534,15 @@ dialog.conflict {
   max-height: 20rem;
   overflow: auto;
 }
+.banner-warn {
+  border: 1px solid var(--c-stale);
+  border-radius: 4px;
+  padding: 0.5rem 0.75rem;
+  margin: 0.5rem 0;
+}
+.banner-warn ul {
+  margin: 0.25rem 0 0;
+}
 .warn {
   color: var(--c-stale);
 }
@@ -565,14 +611,13 @@ body .cm-tooltip.cm-tooltip-autocomplete {
 /* ---- comment threads ---- */
 .cmt-marker {
   display: inline-block;
-  min-width: 1.2em;
-  padding: 0 0.3em;
-  border-radius: 999px;
-  background: var(--acc);
-  color: var(--bg, #fff);
-  font-size: 0.7rem;
-  line-height: 1.3em;
-  text-align: center;
+  color: var(--acc);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 9px;
+  margin: 6px 3px;
+  cursor: pointer;
 }
 .thread {
   border-left: 3px solid var(--acc);
@@ -592,12 +637,6 @@ body .cm-tooltip.cm-tooltip-autocomplete {
 .cbody {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
-}
-.threads textarea {
-  width: 100%;
-  box-sizing: border-box;
-  margin: 0.25rem 0;
-  font: inherit;
 }
 
 /* ---- planner questions ---- */
@@ -625,9 +664,39 @@ body .cm-tooltip.cm-tooltip-autocomplete {
   gap: 0.3rem;
   margin: 0.3rem 0;
 }
-.q-thread textarea {
-  width: 100%;
-  box-sizing: border-box;
+.setup {
+  position: relative;
+}
+.setup-badge {
+  border: 1px solid var(--c-stale);
+  color: var(--c-stale);
+  background: transparent;
+  border-radius: 999px;
+  padding: 0 0.6rem;
+  cursor: pointer;
+}
+.setup-badge[data-kind='unverified'] {
+  border-style: dashed;
+}
+.setup-pop {
+  position: absolute;
+  z-index: 20;
+  top: 2rem;
+  left: 0;
+  width: 22rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--c-stale);
+  border-radius: 4px;
+  background: Canvas;
+  color: CanvasText;
+}
+.setup-pop[hidden] {
+  display: none;
+}
+.setup-pop ul {
   margin: 0.25rem 0;
-  font: inherit;
+  padding-left: 1.25rem;
+}
+.setup-pop .hint {
+  opacity: 0.75;
 }

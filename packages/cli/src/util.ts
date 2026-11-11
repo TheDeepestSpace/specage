@@ -18,7 +18,7 @@ export interface Args {
   flags: Record<string, string | boolean>;
 }
 
-const BOOL = new Set(['json', 'dry-run', 'upgrade', 'rulesets', 'help', 'unfired']);
+const BOOL = new Set(['json', 'dry-run', 'upgrade', 'rulesets', 'help', 'unfired', 'write']);
 
 export function parseArgs(argv: string[]): Args {
   const out: Args = { _: [], flags: {} };
@@ -126,3 +126,9 @@ export const templatesDir = () => join(repoRoot(), 'templates');
 export const protocolDir = () => join(repoRoot(), 'protocol');
 
 export const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/** GitHub links a commit to a bot only via `<id>+<slug>[bot]@users.noreply.github.com`; bare `x[bot]@`/`bot@` resolve to unrelated users. */
+export function isBadNoreplyEmail(email: string): boolean {
+  const m = /^(.*)@users\.noreply\.github\.com$/i.exec(email.trim());
+  return !!m && !/^\d+\+[^@+\s]+$/.test(m[1]);
+}

@@ -98,6 +98,42 @@ test('editor: gutter dots follow the trace, live hashing marks edits stale', asy
   await expect(page.locator('.dot[data-status="verified"]')).toHaveCount(1);
 });
 
+test('code panel draws a 100-column ruler', async () => {
+  await page.goto('/r/o/r');
+  await expect(page.locator('.cm-content')).toContainText('Limit magazine');
+  const ruler = page.locator('.cm-scroller > .cm-ruler');
+  await expect(ruler).toHaveCount(1);
+  const [rx, cx, pad, cw] = await page.evaluate(() => {
+    const r = document.querySelector('.cm-ruler') as HTMLElement;
+    const c = document.querySelector('.cm-content') as HTMLElement;
+    const l = document.querySelector('.cm-line') as HTMLElement;
+    const m = document.createElement('span');
+    m.textContent = 'x'.repeat(100);
+    m.style.cssText = 'position:absolute;visibility:hidden;white-space:pre';
+    l.appendChild(m);
+    const w = m.getBoundingClientRect().width / 100;
+    m.remove();
+    return [r.offsetLeft, c.offsetLeft, parseFloat(getComputedStyle(l).paddingLeft), w];
+  });
+  expect(Math.abs(rx - (cx + pad + 100 * cw))).toBeLessThan(2);
+  await page.screenshot({ path: 'test-results/ruler.png' });
+});
+
+test('editor: native spellcheck on for prose, off for ids/refs/markers', async () => {
+  await page.goto('/r/o/r');
+  const content = page.locator('.cm-content');
+  await expect(content).toContainText('Limit magazine');
+  await expect(content).toHaveAttribute('spellcheck', 'true');
+  await expect(content.locator('.cm-spec-id').first()).toHaveAttribute('spellcheck', 'false');
+  const before = await content.innerText();
+  await page.locator('.cm-line', { hasText: 'Limit magazine' }).click();
+  await page.keyboard.press('End');
+  await page.keyboard.type(' mispelled');
+  await expect(content).toContainText('mispelled'); // typing is untouched by spellcheck
+  await page.keyboard.press('Control+z');
+  expect(await content.innerText()).toBe(before);
+});
+
 test('GRAMMAR.md tab is rendered, read-only, and keeps spec edits', async () => {
   await page.goto('/r/o/r');
   await expect(page.locator('.cm-content')).toContainText('Limit magazine');
@@ -295,10 +331,19 @@ test('questions: clicking the badge opens the node thread; answer, follow-up, re
   expect(st.questions.find((x: any) => x.id === 'q-0002').thread).toEqual([]);
 });
 
+test('questions: clicking an option with a colon and backticks is accepted', async () => {
+  const q = page.locator('#top-questions [data-question="q-0002"]');
+  await q.getByRole('button', { name: /^yes: carry trace\/claims/ }).click();
+  await expect(q.locator('.q-msg').first()).toContainText('retire `s-43c9243d`');
+  await expect(q.locator('.error')).toHaveText('');
+  await expect(q).toHaveClass(/q-open/);
+  await shot('questions-option-answered');
+});
+
 test('questions: top-level question can be withdrawn from the panel', async () => {
   const q = page.locator('#top-questions [data-question="q-0002"]');
   await q.getByRole('button', { name: 'Withdraw', exact: true }).click();
-  await expect(q.locator('.q-msg').first()).toContainText('Withdraw the issue.');
-  await expect(q.locator('.q-msg').first()).toContainText('withdraw');
+  await expect(q.locator('.q-msg').last()).toContainText('Withdraw the issue.');
+  await expect(q.locator('.q-msg').last()).toContainText('withdraw');
   await shot('questions-top-level-answered');
 });

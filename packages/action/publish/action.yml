@@ -55,7 +55,7 @@ runs:
           cd "$RUNNER_TEMP/pages"
           git add -A
           if git diff --cached --quiet; then echo "no changes"; exit 0; fi
-          git -c user.name=specage-bot -c user.email=specage-bot@users.noreply.github.com commit -qm "specage: publish"
+          git -c user.name=github-actions[bot] -c user.email=41898282+github-actions[bot]@users.noreply.github.com commit -qm "specage: publish"
           if git push --quiet origin HEAD:${{ inputs.branch }}; then exit 0; fi
           sleep $((i * 3))
         done

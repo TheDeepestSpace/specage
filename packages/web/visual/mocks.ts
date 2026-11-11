@@ -32,7 +32,18 @@ export const STATE = {
       },
     },
   },
-  work: { items: [] },
+  work: {
+    items: [
+      {
+        id: 'w-burst-cap',
+        issue: 12,
+        pr: 34,
+        state: 'in_review',
+        relations: [],
+        claims: { 'shoot.burst.cap': { hash: hashOf('shoot.burst.cap'), status: 'pending' } },
+      },
+    ],
+  },
   questions: [],
   report: null,
 };
@@ -70,6 +81,7 @@ export interface MockOpts {
   threads?: unknown[];
   repos?: string[];
   spec?: string;
+  setup?: { auto_merge: string; gate: string; fix: string[]; ready: boolean };
   initRepos?: { repo: string; private: boolean; initialised: boolean }[];
 }
 
@@ -90,6 +102,8 @@ export async function mockApi(page: Page, o: MockOpts = {}) {
       return r.fulfill(
         json(o.initRepos ?? [{ repo: 'acme/new', private: false, initialised: false }]),
       );
+    if (/\/api\/r\/[^/]+\/[^/]+\/setup$/.test(u))
+      return r.fulfill(json(o.setup ?? { auto_merge: 'ok', gate: 'ok', fix: [], ready: true }));
     if (/\/api\/r\/[^/]+\/[^/]+\/spec$/.test(u)) {
       if (r.request().method() === 'PUT') return r.fulfill(json({ head_sha: 'b'.repeat(40) }));
       return r.fulfill(

@@ -8,4 +8,6 @@ export * from './state.js';
 export * from './data.js';
 export * from './comments.js';
 export * from './planner.js';
+export * from './reconcile.js';
 export * from './questions.js';
+export * from './issuebody.js';

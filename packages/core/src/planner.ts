@@ -37,7 +37,11 @@ export function buildPlannerDispatch(o: PlannerOpts): Record<string, unknown> {
   const d: Record<string, unknown> = {
     prompt: `${o.specage_repo}:prompts/discovery.md@${o.prompt_ref}`,
     repo: o.repo,
-    access: [{ repo: o.data_repo, scope: 'read/write' }],
+    access: [
+      { repo: o.data_repo, scope: 'read/write' },
+      // read-only code access so the planner can enrich issue bodies
+      { repo: o.repo, scope: 'read' },
+    ],
     callback: { repo: o.specage_repo, workflow: 'callback.yml' },
     context: {
       project: o.project,

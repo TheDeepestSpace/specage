@@ -60,3 +60,56 @@ export const store = {
 export function fail(root: HTMLElement, msg: string) {
   root.replaceChildren(h('p', { class: 'error' }, msg));
 }
+
+/** Visible banner listing problems in the state files (the invalid parts were ignored). */
+export function warningBanner(warnings: string[]): HTMLElement {
+  return h(
+    'div',
+    { class: 'banner-warn', role: 'alert' },
+    h('strong', {}, 'Some state data was ignored because it is invalid:'),
+    h('ul', {}, ...warnings.map((w) => h('li', {}, w))),
+  );
+}
+
+export interface SetupInfo {
+  auto_merge: 'ok' | 'missing' | 'unverified';
+  gate: 'ok' | 'missing' | 'unverified';
+  fix: string[];
+  ready: boolean;
+}
+
+/** Header badge + popup while auto-merge isn't fully configured; null once both settings are verified. */
+export function setupBadge(s: SetupInfo): HTMLElement | null {
+  if (s.ready) return null;
+  const unverified = s.auto_merge !== 'missing' && s.gate !== 'missing';
+  const label = (name: string, v: SetupInfo['gate']) =>
+    h(
+      'li',
+      { 'data-state': v },
+      `${name}: ${v === 'ok' ? 'on' : v === 'missing' ? 'missing' : 'unverified'}`,
+    );
+  const pop = h(
+    'div',
+    { class: 'setup-pop', role: 'dialog', hidden: '' },
+    h('strong', {}, 'Auto-merge is not set up for this repo'),
+    h('ul', {}, label('Allow auto-merge', s.auto_merge), label('Required check "ci-gate"', s.gate)),
+    h('p', {}, 'To fix:'),
+    h('ul', {}, ...s.fix.map((x) => h('li', {}, x))),
+    ...(unverified
+      ? [
+          h(
+            'p',
+            { class: 'hint' },
+            'specage could not read these settings; grant the App "Administration: read" to verify.',
+          ),
+        ]
+      : []),
+  );
+  const btn = h(
+    'button',
+    { class: 'setup-badge', type: 'button', 'data-kind': unverified ? 'unverified' : 'missing' },
+    unverified ? 'Setup unverified' : 'Setup needed',
+  );
+  btn.addEventListener('click', () => pop.toggleAttribute('hidden'));
+  return h('span', { class: 'setup' }, btn, pop);
+}

@@ -1,4 +1,5 @@
 import { createPrivateKey, createSign } from 'node:crypto';
+import type { MergeFacts } from './setup.js';
 
 /** Accepts PEM with real newlines, literal \n, collapsed spaces, or base64 of the PEM. */
 export function normalizePem(raw: string): string {
@@ -47,6 +48,13 @@ export interface GitHub {
   /** repos the App installation can see (not limited to the data repo) */
   listInstallationRepos(): Promise<RepoInfo[]>;
   getRepo(repo: string): Promise<RepoInfo | null>;
+  /** auto-merge facts for a project repo's default branch; fields are null when unreadable */
+  getMergeFacts(repo: string, branch: string): Promise<MergeFacts>;
+  /**
+   * PR numbers with a queued / in-progress workflow run on the repo, or null when unreadable
+   * (e.g. the App lacks Actions read). One call per status; callers cache.
+   */
+  getActivePrs(repo: string): Promise<number[] | null>;
   /** creates missing labels on a project repo; throws PermissionError without Issues access */
   ensureLabels(repo: string, labels: string[]): Promise<void>;
   /** creates an orphan branch specages/<project>/<kind> with one commit; throws Conflict if it exists */
@@ -100,7 +108,20 @@ export const ALLOWED: { method: string; auth: 'jwt' | 'install'; re: RegExp }[] 
   {
     method: 'GET',
     auth: 'install',
+    re: new RegExp(`^/repos/${SEG}/${SEG}/branches/[^?]+/protection/required_status_checks$`),
+  },
+  { method: 'GET', auth: 'install', re: new RegExp(`^/repos/${SEG}/${SEG}/rules/branches/[^?]+$`) },
+  {
+    method: 'GET',
+    auth: 'install',
     re: new RegExp(`^/repos/${SEG}/${SEG}/git/matching-refs/heads/specages/$`),
+  },
+  {
+    method: 'GET',
+    auth: 'install',
+    re: new RegExp(
+      `^/repos/${SEG}/${SEG}/actions/runs\\?status=(queued|in_progress)&per_page=\\d+$`,
+    ),
   },
   {
     method: 'GET',
@@ -115,7 +136,7 @@ export const ALLOWED: { method: string; auth: 'jwt' | 'install'; re: RegExp }[] 
   {
     method: 'PATCH',
     auth: 'install',
-    re: new RegExp(`^/repos/${SEG}/${SEG}/git/refs/heads/specages/${SEG}/spec$`),
+    re: new RegExp(`^/repos/${SEG}/${SEG}/git/refs/heads/specages/${SEG}/(spec|trail)$`),
   },
   { method: 'POST', auth: 'install', re: new RegExp(`^/repos/${SEG}/${SEG}/git/refs$`) },
   {
@@ -234,6 +255,28 @@ export class RealGitHub implements GitHub {
     return j.token;
   }
 
+  /**
+   * Read-only token for repo settings and branch protection (Administration: read). Falls back to the
+   * wide token when the App was not granted it; protection then reads as unverified.
+   */
+  private async adminReadToken(): Promise<string> {
+    if (this.o.devToken) return this.o.devToken;
+    const c = this.tokens.get('admin');
+    if (c && c.exp - 5 * 60_000 > this.now()) return c.token;
+    const id = await this.installationId();
+    const r = await this.req(
+      'POST',
+      `/app/installations/${id}/access_tokens`,
+      { kind: 'jwt' },
+      { permissions: { administration: 'read', metadata: 'read' } },
+    );
+    if (r.status === 422 || r.status === 403) return this.wideToken();
+    if (!r.ok) throw new Error(`GitHub token mint failed: ${r.status}`);
+    const j = (await r.json()) as any;
+    this.tokens.set('admin', { token: j.token, exp: Date.parse(j.expires_at) });
+    return j.token;
+  }
+
   /** Actions write on the intern repo only (dispatches the-intern's workflow). */
   private async internToken(internRepo: string): Promise<string> {
     if (this.o.devToken) return this.o.devToken;
@@ -331,6 +374,56 @@ export class RealGitHub implements GitHub {
     if (!r.ok) throw new Error(`GitHub ${r.status}`);
     const x = (await r.json()) as any;
     return { full_name: x.full_name, private: !!x.private, default_branch: x.default_branch };
+  }
+
+  async getMergeFacts(repo: string, branch: string): Promise<MergeFacts> {
+    const token = await this.adminReadToken();
+    const get = (path: string) => this.req('GET', path, { kind: 'install', token });
+    const out: MergeFacts = { allow_auto_merge: null, required_checks: null };
+    const rr = await get(`/repos/${repo}`);
+    if (rr.ok) {
+      const v = ((await rr.json()) as any).allow_auto_merge;
+      if (typeof v === 'boolean') out.allow_auto_merge = v;
+    }
+    const b = encodeURIComponent(branch);
+    const names: string[] = [];
+    let known = 0;
+    const pr = await get(`/repos/${repo}/branches/${b}/protection/required_status_checks`);
+    if (pr.ok) {
+      known++;
+      const j = (await pr.json()) as any;
+      names.push(...(j.contexts ?? []), ...(j.checks ?? []).map((x: any) => x.context));
+    } else if (
+      pr.status === 404 &&
+      /not protected/i.test(((await pr.json().catch(() => ({}))) as any).message ?? '')
+    ) {
+      known++; // no classic protection on this branch
+    }
+    const ru = await get(`/repos/${repo}/rules/branches/${b}`);
+    if (ru.ok) {
+      known++;
+      for (const x of (await ru.json()) as any[])
+        if (x.type === 'required_status_checks')
+          names.push(...(x.parameters?.required_status_checks ?? []).map((c: any) => c.context));
+    }
+    if (known > 0) out.required_checks = names;
+    if (known === 1) out.partial = true;
+    return out;
+  }
+
+  async getActivePrs(repo: string): Promise<number[] | null> {
+    const token = await this.adminReadToken();
+    const prs = new Set<number>();
+    for (const status of ['queued', 'in_progress']) {
+      const r = await this.req('GET', `/repos/${repo}/actions/runs?status=${status}&per_page=100`, {
+        kind: 'install',
+        token,
+      });
+      if (!r.ok) return null;
+      for (const run of ((await r.json()) as any).workflow_runs ?? [])
+        for (const pr of run.pull_requests ?? []) prs.add(pr.number);
+    }
+    return [...prs];
   }
 
   async ensureLabels(repo: string, labels: string[]) {

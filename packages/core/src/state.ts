@@ -5,6 +5,7 @@ import {
   CommentsFileSchema,
   QuestionsSchema,
   ThreadEventsSchema,
+  TraceNodeSchema,
   TraceSchema,
   WorkSchema,
   type State,
@@ -66,9 +67,26 @@ export function parseState(raw: {
       issues.push({ file, message: `${i.path.join('.')}: ${i.message}` });
     return schema.safeParse(dflt).data as T;
   };
+  // One bad node must not blank the whole trace: drop only the invalid nodes (reported as issues).
+  let trace = raw.trace;
+  const nodes = (trace as any)?.nodes;
+  if (nodes && typeof nodes === 'object' && !Array.isArray(nodes)) {
+    const good: Record<string, unknown> = {};
+    for (const [id, n] of Object.entries(nodes)) {
+      const r = TraceNodeSchema.safeParse(n);
+      if (r.success) good[id] = n;
+      else
+        for (const i of r.error.issues)
+          issues.push({
+            file: 'trace.yaml',
+            message: `nodes.${id}${i.path.length ? '.' + i.path.join('.') : ''}: ${i.message} (node ignored)`,
+          });
+    }
+    trace = { ...(trace as object), nodes: good };
+  }
   return {
     state: {
-      trace: run('trace.yaml', TraceSchema, raw.trace, {}),
+      trace: run('trace.yaml', TraceSchema, trace, {}),
       work: run('work.yaml', WorkSchema, raw.work, {}),
       questions: run('questions.yaml', QuestionsSchema, raw.questions, []),
       thread_events: run('thread-events.yaml', ThreadEventsSchema, raw.thread_events, []),

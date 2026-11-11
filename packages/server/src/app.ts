@@ -39,6 +39,7 @@ import {
   trailBranch,
   type GitHub,
 } from './github.js';
+import { evaluateSetup } from './setup.js';
 import { BadInit, planInit, runInit } from './init.js';
 import { safeEqual, seal, unseal } from './seal.js';
 import {
@@ -436,6 +437,18 @@ export function createApp({ env, db, github, now = Date.now }: Deps) {
   });
   const cfgOf = (c: Context) => c.get('cfg' as never) as ReturnType<typeof ConfigSchema.parse>;
 
+  // auto-merge readiness (allow_auto_merge + ci-gate required); never fails the page: unreadable => unverified
+  app.get('/api/r/:owner/:repo/setup', async (c) => {
+    const { owner, repo } = c.req.param();
+    try {
+      const info = await github.getRepo(`${owner}/${repo}`);
+      if (!info) return c.json(evaluateSetup({ allow_auto_merge: null, required_checks: null }));
+      return c.json(evaluateSetup(await github.getMergeFacts(info.full_name, info.default_branch)));
+    } catch {
+      return c.json(evaluateSetup({ allow_auto_merge: null, required_checks: null }));
+    }
+  });
+
   app.get('/api/r/:owner/:repo/spec', async (c) => {
     const { repo } = c.req.param();
     const path = cfgOf(c).spec_file;
@@ -445,20 +458,51 @@ export function createApp({ env, db, github, now = Date.now }: Deps) {
     return c.json({ content, head_sha: head, path });
   });
 
+  // "active agent" = open work item in_progress whose PR has a queued/in-progress workflow run;
+  // when runs are unreadable, any in_progress work item counts. Cached 30s per repo.
+  const activeCache = new Map<string, { at: number; prs: number[] | null }>();
+  const activePrs = async (full: string): Promise<number[] | null> => {
+    const hit = activeCache.get(full);
+    if (hit && now() - hit.at < 30_000) return hit.prs;
+    let prs: number[] | null = null;
+    try {
+      prs = await github.getActivePrs(full);
+    } catch {
+      /* unreadable: fall back */
+    }
+    activeCache.set(full, { at: now(), prs });
+    return prs;
+  };
+
   app.get('/api/r/:owner/:repo/state', async (c) => {
-    const { repo } = c.req.param();
+    const { owner, repo } = c.req.param();
     const f = async (p: string) => {
       const t = await github.getFile(p, trailBranch(repo));
       return t === null ? undefined : parseYaml(t);
     };
-    const { state } = parseState({
+    const { state, issues } = parseState({
       trace: await f('trace.yaml'),
       work: await f('work.yaml'),
       questions: await f('questions.yaml'),
       thread_events: await f('thread-events.yaml'),
     });
     const { threads } = parseComments(await github.getFile(COMMENTS_FILE, specBranch(repo)));
-    return c.json({ ...state, threads: mergeThreads(threads, state.thread_events), report: null });
+    const working = state.work.items.filter((w) => w.state === 'in_progress');
+    const runs = working.length ? await activePrs(`${owner}/${repo}`) : [];
+    const active_nodes = [
+      ...new Set(
+        working
+          .filter((w) => runs === null || (w.pr !== null && runs.includes(w.pr)))
+          .flatMap((w) => Object.keys(w.claims)),
+      ),
+    ];
+    return c.json({
+      ...state,
+      active_nodes,
+      threads: mergeThreads(threads, state.thread_events),
+      report: null,
+      warnings: issues.map((i) => `${i.file} ${i.message}`),
+    });
   });
 
   const rateLimit = (c: Context): Response | null => {
@@ -531,6 +575,13 @@ export function createApp({ env, db, github, now = Date.now }: Deps) {
     return c.json({ error: 'conflict, try again' }, 409);
   });
 
+  // An unexpected storage failure: log the real error, tell the user it is upstream (502), not a bug in their request.
+  const githubFailure = (c: Context, e: unknown, action: string, target: string) => {
+    console.error(`${action} ${target}: ${e instanceof Error ? e.message : String(e)}`);
+    db.audit(action, target, '502');
+    return c.json({ error: 'could not save to the data repo (GitHub error), try again' }, 502);
+  };
+
   // Planner questions: a human answer or follow-up is appended to the question's thread in
   // questions.yaml on the trail branch. The question stays open until the planner resolves it, and
   // the trail push makes the next planner run apply the answer.
@@ -542,11 +593,18 @@ export function createApp({ env, db, github, now = Date.now }: Deps) {
     if (!op || typeof op.id !== 'string') return c.json({ error: 'bad op' }, 400);
     if (op.choice !== undefined && op.choice !== 'withdraw' && op.choice !== 'keep')
       return c.json({ error: 'bad choice' }, 400);
-    const body = typeof op.body === 'string' ? op.body : undefined;
+    if (op.body !== undefined && typeof op.body !== 'string')
+      return c.json({ error: 'body must be text' }, 400);
+    const body: string | undefined = op.body;
     const author = db.cred(sess(c).cid)?.label ?? 'owner';
     for (let attempt = 0; attempt < 3; attempt++) {
-      const text = await github.getFile('questions.yaml', trailBranch(repo));
-      const cur = QuestionsSchema.safeParse((text === null ? undefined : parseYaml(text)) ?? []);
+      let cur;
+      try {
+        const text = await github.getFile('questions.yaml', trailBranch(repo));
+        cur = QuestionsSchema.safeParse((text === null ? undefined : parseYaml(text)) ?? []);
+      } catch (e) {
+        return githubFailure(c, e, 'question', `${owner}/${repo}`);
+      }
       if (!cur.success) return c.json({ error: 'questions.yaml is invalid' }, 422);
       let next;
       try {
@@ -570,7 +628,7 @@ export function createApp({ env, db, github, now = Date.now }: Deps) {
         return c.json({ questions: next });
       } catch (e) {
         if (e instanceof NotFound) return c.json({ error: 'trail branch not found' }, 404);
-        if (!(e instanceof Conflict)) throw e;
+        if (!(e instanceof Conflict)) return githubFailure(c, e, 'question', `${owner}/${repo}`);
       }
     }
     db.audit('question', `${owner}/${repo}`, '409');
