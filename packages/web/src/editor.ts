@@ -41,7 +41,7 @@ import { diff as coreDiff, lint, parse, type State, type Thread } from '@specage
 import { api, ApiError, loadMe } from './api.js';
 import { analyse, dotStatus, nodeAtLine, slug, type Analysis } from './analysis.js';
 import { conflictDialog } from './conflict.js';
-import { h, store, warningBanner } from './dom.js';
+import { h, setupBadge, store, warningBanner, type SetupInfo } from './dom.js';
 import grammarSrc from '../../../protocol/GRAMMAR.md?raw';
 import { renderMarkdown } from './markdown.js';
 import { openFor } from './questions.js';
@@ -405,12 +405,22 @@ export async function renderEditor(root: HTMLElement, repo: string) {
     editorEl,
     grammarEl,
   );
+  const setupSlot = h('span', { class: 'setup-slot' });
+  // non-blocking: the badge appears only when auto-merge isn't fully set up (clears on next load once fixed)
+  api('GET', `/api/r/${repo}/setup`)
+    .then((s: SetupInfo) => {
+      const b = setupBadge(s);
+      setupSlot.replaceChildren(...(b ? [b] : []));
+      fitTop();
+    })
+    .catch(() => {});
   root.replaceChildren(
     h(
       'header',
       { class: 'top' },
       h('h1', {}, repo),
       h('a', { href: '/' }, 'repos'),
+      setupSlot,
       status,
       h('label', { class: 'toggle', title: 'Vim keybindings' }, vimBox, 'Vim'),
       vimMode,
