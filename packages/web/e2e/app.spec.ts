@@ -98,17 +98,19 @@ test('editor: gutter dots follow the trace, live hashing marks edits stale', asy
   await expect(page.locator('.dot[data-status="verified"]')).toHaveCount(1);
 });
 
-test('editor: native spellcheck on for prose, off for ids/refs/markers', async () => {
+test('editor: in-editor spellcheck underlines misspellings on load, not ids/refs/markers', async () => {
   await page.goto('/r/o/r');
   const content = page.locator('.cm-content');
   await expect(content).toContainText('Limit magazine');
-  await expect(content).toHaveAttribute('spellcheck', 'true');
-  await expect(content.locator('.cm-spec-id').first()).toHaveAttribute('spellcheck', 'false');
+  await expect(content).toHaveAttribute('spellcheck', 'false'); // native check is off; ours is `.cm-spell-error`
+  await expect(content.locator('.cm-spec-id').first()).toBeVisible();
   const before = await content.innerText();
   await page.locator('.cm-line', { hasText: 'Limit magazine' }).click();
   await page.keyboard.press('End');
   await page.keyboard.type(' mispelled');
   await expect(content).toContainText('mispelled'); // typing is untouched by spellcheck
+  // in-editor check underlines the misspelling (debounced) but never ids/refs/markers
+  await expect(content.locator('.cm-spell-error')).toHaveText(['mispelled']);
   await page.keyboard.press('Control+z');
   expect(await content.innerText()).toBe(before);
 });
