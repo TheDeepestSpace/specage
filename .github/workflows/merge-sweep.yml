@@ -64,7 +64,7 @@ jobs:
 
             # Spec: trailers from the PR's commits are carried into the squash message
             trailers=$(gh api --paginate "repos/$REPO/pulls/$n/commits" --jq '.[].commit.message' \
-                         | grep -E '^Spec(-Release)?: ' | sort -u)
+                         | { grep -E '^Spec(-Release)?: ' || true; } | sort -u)
             grep -q '^Spec: ' <<<"$trailers" || { skip "$n" "no Spec: trailer"; continue; }
 
             title=$(jq -r .title <<<"$info")
