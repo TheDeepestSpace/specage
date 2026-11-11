@@ -639,3 +639,39 @@ body .cm-tooltip.cm-tooltip-autocomplete {
   margin: 0.25rem 0;
   font: inherit;
 }
+.setup {
+  position: relative;
+}
+.setup-badge {
+  border: 1px solid var(--c-stale);
+  color: var(--c-stale);
+  background: transparent;
+  border-radius: 999px;
+  padding: 0 0.6rem;
+  cursor: pointer;
+}
+.setup-badge[data-kind='unverified'] {
+  border-style: dashed;
+}
+.setup-pop {
+  position: absolute;
+  z-index: 20;
+  top: 2rem;
+  left: 0;
+  width: 22rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--c-stale);
+  border-radius: 4px;
+  background: Canvas;
+  color: CanvasText;
+}
+.setup-pop[hidden] {
+  display: none;
+}
+.setup-pop ul {
+  margin: 0.25rem 0;
+  padding-left: 1.25rem;
+}
+.setup-pop .hint {
+  opacity: 0.75;
+}

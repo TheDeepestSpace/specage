@@ -39,6 +39,7 @@ import {
   trailBranch,
   type GitHub,
 } from './github.js';
+import { evaluateSetup } from './setup.js';
 import { BadInit, planInit, runInit } from './init.js';
 import { safeEqual, seal, unseal } from './seal.js';
 import {
@@ -435,6 +436,18 @@ export function createApp({ env, db, github, now = Date.now }: Deps) {
     return next();
   });
   const cfgOf = (c: Context) => c.get('cfg' as never) as ReturnType<typeof ConfigSchema.parse>;
+
+  // auto-merge readiness (allow_auto_merge + ci-gate required); never fails the page: unreadable => unverified
+  app.get('/api/r/:owner/:repo/setup', async (c) => {
+    const { owner, repo } = c.req.param();
+    try {
+      const info = await github.getRepo(`${owner}/${repo}`);
+      if (!info) return c.json(evaluateSetup({ allow_auto_merge: null, required_checks: null }));
+      return c.json(evaluateSetup(await github.getMergeFacts(info.full_name, info.default_branch)));
+    } catch {
+      return c.json(evaluateSetup({ allow_auto_merge: null, required_checks: null }));
+    }
+  });
 
   app.get('/api/r/:owner/:repo/spec', async (c) => {
     const { repo } = c.req.param();
