@@ -1,5 +1,5 @@
 name: merge-sweep
-# Nightly + manual sweep: squash-merge open `specage/*` PRs that are approved, green and carry a
+# Nightly + manual sweep: squash-merge open `specage/*` PRs that carry a bot APPROVE on the head SHA, are green and carry a
 # `Spec:` trailer. Conflicts / not-mergeable PRs are skipped (left for the conflict dispatcher);
 # a skipped PR never fails the run. Merges are sequential and mergeability is re-checked per PR.
 on:
@@ -19,6 +19,7 @@ jobs:
     timeout-minutes: 20
     steps:
       # specage App token: Pull requests rw + Contents rw on the project repo.
+      - uses: actions/checkout@v4
       - id: app
         uses: actions/create-github-app-token@v3
         with:
@@ -40,14 +41,16 @@ jobs:
           for n in $prs; do
             # mergeable is computed lazily: poll while UNKNOWN
             for _ in 1 2 3 4 5; do
-              info=$(gh pr view "$n" -R "$REPO" --json title,isDraft,reviewDecision,mergeable,headRefOid,statusCheckRollup) || { info=; break; }
+              info=$(gh pr view "$n" -R "$REPO" --json title,isDraft,mergeable,headRefOid,statusCheckRollup) || { info=; break; }
               [ "$(jq -r .mergeable <<<"$info")" != UNKNOWN ] && break
               sleep 5
             done
             [ -n "$info" ] || { skip "$n" "could not read PR"; continue; }
             sha=$(jq -r .headRefOid <<<"$info")
             [ "$(jq -r .isDraft <<<"$info")" = false ] || { skip "$n" "draft"; continue; }
-            [ "$(jq -r .reviewDecision <<<"$info")" = APPROVED ] || { skip "$n" "not approved ($(jq -r .reviewDecision <<<"$info"))"; continue; }
+            # The bot can't submit real approvals: its latest review must start with APPROVE and be on the head SHA
+            gh api --paginate --slurp "repos/$REPO/pulls/$n/reviews" | node scripts/approval.mjs "$sha" \
+              || { skip "$n" "no bot APPROVE on head $sha"; continue; }
             [ "$(jq -r .mergeable <<<"$info")" = MERGEABLE ] || { skip "$n" "not mergeable ($(jq -r .mergeable <<<"$info"))"; continue; }
 
             # ci-gate if present, otherwise every check must be green (skipped/neutral are fine)
