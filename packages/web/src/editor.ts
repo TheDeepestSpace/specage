@@ -224,7 +224,11 @@ export async function renderEditor(root: HTMLElement, repo: string) {
       }
       build(v: EditorView): DecorationSet {
         const out: Range<Decoration>[] = specTokens(v.state.doc.toString()).map((t) =>
-          Decoration.mark({ class: t.cls }).range(t.from, t.to),
+          Decoration.mark({
+            class: t.cls,
+            // only prose is spellchecked: ids, $refs, markers and escapes are not
+            ...(t.cls === 'cm-spec-comment' ? {} : { attributes: { spellcheck: 'false' } }),
+          }).range(t.from, t.to),
         );
         return Decoration.set(out, true);
       }
@@ -579,7 +583,8 @@ export async function renderEditor(root: HTMLElement, repo: string) {
           }
           if (u.docChanged) refreshButtons();
         }),
-        EditorView.contentAttributes.of({ 'aria-label': 'Spec editor' }),
+        // native browser spellcheck: red wavy underline on misspelled words, no text/caret changes
+        EditorView.contentAttributes.of({ 'aria-label': 'Spec editor', spellcheck: 'true' }),
       ],
     }),
   });

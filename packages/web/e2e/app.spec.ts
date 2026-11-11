@@ -98,6 +98,21 @@ test('editor: gutter dots follow the trace, live hashing marks edits stale', asy
   await expect(page.locator('.dot[data-status="verified"]')).toHaveCount(1);
 });
 
+test('editor: native spellcheck on for prose, off for ids/refs/markers', async () => {
+  await page.goto('/r/o/r');
+  const content = page.locator('.cm-content');
+  await expect(content).toContainText('Limit magazine');
+  await expect(content).toHaveAttribute('spellcheck', 'true');
+  await expect(content.locator('.cm-spec-id').first()).toHaveAttribute('spellcheck', 'false');
+  const before = await content.innerText();
+  await page.locator('.cm-line', { hasText: 'Limit magazine' }).click();
+  await page.keyboard.press('End');
+  await page.keyboard.type(' mispelled');
+  await expect(content).toContainText('mispelled'); // typing is untouched by spellcheck
+  await page.keyboard.press('Control+z');
+  expect(await content.innerText()).toBe(before);
+});
+
 test('GRAMMAR.md tab is rendered, read-only, and keeps spec edits', async () => {
   await page.goto('/r/o/r');
   await expect(page.locator('.cm-content')).toContainText('Limit magazine');
