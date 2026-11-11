@@ -239,7 +239,13 @@ export async function renderEditor(root: HTMLElement, repo: string) {
         for (const [re, cls] of decoRe)
           for (const m of text.matchAll(re))
             if (m[0])
-              out.push(Decoration.mark({ class: cls }).range(m.index!, m.index! + m[0].length));
+              out.push(
+                Decoration.mark({
+                  class: cls,
+                  // only prose is spellchecked: ids, $refs, markers and escapes are not
+                  ...(cls === 'cm-spec-comment' ? {} : { attributes: { spellcheck: 'false' } }),
+                }).range(m.index!, m.index! + m[0].length),
+              );
         // brace pairs coloured by nesting depth; `\{` `\}` are escaped text, not braces
         let depth = 0;
         const stack: number[] = [];
@@ -617,7 +623,8 @@ export async function renderEditor(root: HTMLElement, repo: string) {
           }
           if (u.docChanged) refreshButtons();
         }),
-        EditorView.contentAttributes.of({ 'aria-label': 'Spec editor' }),
+        // native browser spellcheck: red wavy underline on misspelled words, no text/caret changes
+        EditorView.contentAttributes.of({ 'aria-label': 'Spec editor', spellcheck: 'true' }),
       ],
     }),
   });

@@ -33,7 +33,9 @@ Stop at the first rung that applies.
 6. **removed**: first, if the removal pairs with an added node that has a derived name (ID-less statements get a new name when reworded), compare old and new text. If the meaning is unchanged, treat it as cosmetic (rung 3): no action, and carry the old trace entry, evidence and claims over to the new derived name. If it changed, handle the pair as removed + added. Otherwise, if in-flight work exists, ask. Otherwise retire the ID, reconcile its undispatched or closed issues (see Reconcile existing issues) and note whether code for it still exists. Never delete code unprompted.
 7. **suspected_rename**: ask (question kind `rename`).
 
-Skip nodes marked `?` (open question) and `>later:`; list them in the report only.
+Skip nodes marked `>later:`; list them in the report only.
+
+Nodes marked `?` are questions to you, not work. When a `?` node is in the diff or sits in a changed scope (the containing node's subtree changed), read its text as a question and answer it in this run. Never file an issue or gap for the question itself, and never claim it. Answer in a thread on that node: reply to an existing open thread (`thread-events.yaml`, see Comment threads), or if none exists open a `questions.yaml` entry anchored on the `?` node and put the answer in its `thread`. Alternatively hand the follow-up to a dispatched worker (issue or `outbox/` entry) and say so in the reply. List answered `?` nodes in the report. `diff --json` includes `?` nodes with their normal hashes.
 
 Discovery is biased toward "implemented", so be strict:
 - Never write `verified`; only the human can.
@@ -92,6 +94,7 @@ For sessions dispatched to review an implement PR (the dispatch message names th
 - Never push to the PR branch or the review branch yourself.
 - On APPROVE (after posting the verdict above, which stays as is, including the `APPROVE` first-line comment fallback), enable auto-merge instead of merging directly: `gh pr merge <number> --auto --squash --match-head-commit <reviewed-head-sha>` (or the repo's configured method). Only when the verdict is APPROVE, the PR is not a draft, and the PR head is still the SHA you reviewed. GitHub then merges once the required `ci-gate` check passes. If CI fails, the failure triggers a fix dispatch; after the fix, review again and re-enable auto-merge. Never enable it on request-changes.
 - CI rule: any PR that adds a CI job (in any workflow) must add it to the `needs:` of the `ci-gate` job in `.github/workflows/ci.yml`; `ci-gate` is the only required status check and must live in a workflow without path filters. Check this when reviewing and request changes if missing.
+- The nightly merge-sweep treats the latest `the-intern-bot` review whose body starts with `APPROVE` as approval, only if its `commit_id` equals the PR head SHA (so any push after review requires a re-review); it does not require `reviewDecision == APPROVED`, but still requires green checks (`ci-gate`) and no conflicts.
 - If enabling auto-merge fails (not allowed on the repo, permissions, conflicts, moved head), say so in a PR comment and stop; do not retry or force.
 - Ignore your own earlier reviews as evidence that anything works.
 
