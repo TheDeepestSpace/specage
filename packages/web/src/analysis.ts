@@ -133,3 +133,16 @@ export function toCmDiagnostics(diags: Diagnostic[]) {
   return diags;
 }
 export { lint };
+
+/** True when the gutter dot is orange and any in_progress leaf under it has an active agent. */
+export function dotPulse(n: SpecNode, st: State, active: ReadonlySet<string>): boolean {
+  if (dotStatus(n, st) !== 'in_progress') return false;
+  const live = (x: SpecNode): boolean =>
+    x.type === 'leaf'
+      ? nodeStatus(x, st) === 'in_progress' && active.has(x.id)
+      : x.children.some(live);
+  return live(n);
+}
+
+export const dotClass = (status: string, pulse: boolean): string =>
+  `dot st-${status}${pulse && status === 'in_progress' ? ' pulse' : ''}`;
