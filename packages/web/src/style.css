@@ -439,6 +439,10 @@ pre {
   color: var(--mut);
   font-style: italic;
 }
+.cm-spell-error {
+  text-decoration: underline wavy red;
+  text-decoration-skip-ink: none;
+}
 .cm-spec-marker {
   color: var(--c-planned);
   font-weight: 600;
