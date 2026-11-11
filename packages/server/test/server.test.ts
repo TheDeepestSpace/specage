@@ -4,6 +4,7 @@ import { RealGitHub, ALLOWED } from '../src/github.js';
 import { seal, unseal } from '../src/seal.js';
 import { challengeText, verifySshsig, signupNamespace, SshsigError } from '../src/sshsig.js';
 import { loadEnv } from '../src/env.js';
+import { evaluateSetup } from '../src/setup.js';
 import { FakeGitHub, ORIGIN, SPEC0, SoftAuthenticator, harness, sshKey } from './helpers.js';
 import { generateKeyPairSync } from 'node:crypto';
 
@@ -699,5 +700,45 @@ describe('env', () => {
   it('requires https and a 32 byte secret in production', () => {
     expect(() => loadEnv({ ...base, PUBLIC_URL: 'http://x.fly.dev' })).toThrow(/https/);
     expect(() => loadEnv({ ...base, SESSION_SECRET: 'AAAA' })).toThrow(/32 bytes/);
+  });
+});
+
+describe('auto-merge setup detection', () => {
+  const f = (allow_auto_merge: boolean | null, required_checks: string[] | null, partial = false) =>
+    evaluateSetup({ allow_auto_merge, required_checks, partial });
+  it('ready only when auto-merge is on and ci-gate is required', () => {
+    expect(f(true, ['ci-gate', 'test'])).toMatchObject({ ready: true, fix: [] });
+    expect(f(false, ['ci-gate'])).toMatchObject({
+      auto_merge: 'missing',
+      gate: 'ok',
+      ready: false,
+    });
+    expect(f(true, ['test'])).toMatchObject({ auto_merge: 'ok', gate: 'missing', ready: false });
+    expect(f(true, [])).toMatchObject({ gate: 'missing' });
+  });
+  it('unreadable settings are unverified, not missing', () => {
+    expect(f(null, null)).toMatchObject({ auto_merge: 'unverified', gate: 'unverified' });
+    expect(f(true, ['test'], true).gate).toBe('unverified'); // only one of protection/rulesets readable
+    expect(f(true, ['ci-gate'], true).gate).toBe('ok');
+    expect(f(null, null).fix).toHaveLength(2);
+  });
+  it('GET /api/r/:o/:r/setup reflects GitHub and degrades to unverified on errors', async () => {
+    const h = harness();
+    await h.signup(auth());
+    h.github.mergeFacts = { allow_auto_merge: false, required_checks: ['test'] };
+    expect(await (await h.req('GET', '/api/r/o/r/setup')).json()).toMatchObject({
+      auto_merge: 'missing',
+      gate: 'missing',
+      ready: false,
+    });
+    h.github.mergeFacts = { allow_auto_merge: true, required_checks: ['ci-gate'] };
+    expect(await (await h.req('GET', '/api/r/o/r/setup')).json()).toMatchObject({ ready: true });
+    h.github.getMergeFacts = async () => {
+      throw new Error('boom');
+    };
+    expect(await (await h.req('GET', '/api/r/o/r/setup')).json()).toMatchObject({
+      auto_merge: 'unverified',
+      gate: 'unverified',
+    });
   });
 });

@@ -9,4 +9,6 @@ Submit the verdict with `gh pr review --approve` or `--request-changes` and a sh
 
 On request-changes, also post a PR comment starting with `@the-intern-bot` followed by the findings to fix, so the implement agent picks them up. Ignore earlier reviews as evidence that anything works.
 
-On APPROVE, after posting the verdict, merge: `gh pr merge <pr> --squash --delete-branch --match-head-commit <reviewed-head-sha>` (or the repo's configured method). Only if no required check is failing or pending (none is fine), the PR is not a draft, and the head is still the SHA you reviewed. If the merge fails, say so in a PR comment and stop; no retry, no force. Never merge on request-changes.
+On APPROVE, after posting the verdict, enable auto-merge: `gh pr merge <pr> --auto --squash --match-head-commit <reviewed-head-sha>` (or the repo's configured method). Only if the PR is not a draft and the head is still the SHA you reviewed. Do not merge directly; the required `ci-gate` check gates the merge, and a CI failure triggers a fix dispatch, then re-review and re-enable auto-merge. If enabling fails, say so in a PR comment and stop; no retry, no force. Never enable it on request-changes.
+
+If the PR adds a CI job, check it is listed in `needs:` of `ci-gate` in `.github/workflows/ci.yml`; request changes if not.
