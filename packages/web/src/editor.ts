@@ -43,6 +43,7 @@ import {
   dotClass,
   dotPulse,
   dotStatus,
+  diagRange,
   nodeAtLine,
   slug,
   type Analysis,
@@ -301,15 +302,14 @@ export async function renderEditor(root: HTMLElement, repo: string) {
 
   const lintSource = linter(
     (view): CmDiag[] => {
-      const doc = view.state.doc;
+      const text = view.state.doc.toString();
       const a = view.state.field(analysisField);
       return lint(a.spec, {
         retiredIds: state.trace.retired_ids,
         consumedLineage: state.trace.consumed_lineage,
+        source: text,
       }).map((d) => {
-        const line = doc.line(Math.min(Math.max(d.line, 1), doc.lines));
-        const from = Math.min(line.from + Math.max(d.column - 1, 0), line.to);
-        const to = Math.max(Math.min(line.to, from + 60), Math.min(from + 1, doc.length));
+        const { from, to } = diagRange(text, d);
         const diag: CmDiag = {
           from,
           to,

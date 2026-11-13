@@ -97,6 +97,7 @@ export function cmdLint(a: Args): number {
   const file = a._[1];
   if (!file) throw new CliError('usage: specage lint <file> [--state <dir>] [--json]');
   const spec = readSpecFile(file);
+  const text = readFileSync(file, 'utf8');
   let ls;
   const sd = str(a, 'state');
   if (sd) {
@@ -108,7 +109,7 @@ export function cmdLint(a: Args): number {
       );
     ls = { retiredIds: state.trace.retired_ids, consumedLineage: state.trace.consumed_lineage };
   }
-  const diags = lint(spec, ls);
+  const diags = lint(spec, { ...ls, source: text });
   if (a.flags.json)
     out(
       JSON.stringify(

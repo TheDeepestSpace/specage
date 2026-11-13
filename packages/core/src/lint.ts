@@ -4,7 +4,11 @@ import { PROOF_KINDS, flatten } from './parse.js';
 export interface LintState {
   retiredIds?: string[];
   consumedLineage?: string[];
+  /** spec source text; enables line-based lints (W109) */
+  source?: string;
 }
+
+export const RULER_COL = 100;
 
 export function lint(spec: Spec, state?: LintState): Diagnostic[] {
   const out: Diagnostic[] = [...spec.diagnostics];
@@ -60,7 +64,24 @@ export function lint(spec: Spec, state?: LintState): Diagnostic[] {
     if (!n.derived && n.lineage.length && consumed.has(n.id))
       push('W105', 'warn', `"<-" clause on "${n.id}" survived the dispatch that consumed it`, n);
   }
-  return out.sort((a, b) => a.line - b.line || a.column - b.column);
+  if (state?.source !== undefined) {
+    state.source.split(/\r\n|\n|\r/).forEach((text, i) => {
+      const len = [...text].length;
+      if (len > RULER_COL)
+        out.push({
+          code: 'W109',
+          level: 'warn',
+          message: `line is ${len} symbols (>${RULER_COL})`,
+          line: i + 1,
+          column: RULER_COL + 1,
+          endLine: i + 1,
+          endColumn: len + 1,
+        });
+    });
+  }
+  return out
+    .map((d) => ({ ...d, endLine: d.endLine ?? d.line, endColumn: d.endColumn ?? d.column + 1 }))
+    .sort((a, b) => a.line - b.line || a.column - b.column);
 }
 
 export function hasErrors(d: Diagnostic[]): boolean {
