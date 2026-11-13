@@ -4,8 +4,12 @@ export interface Diagnostic {
   code: string;
   level: Level;
   message: string;
+  /** start (1-based; column counts code points) */
   line: number;
   column: number;
+  /** end of range, 1-based, endColumn exclusive */
+  endLine?: number;
+  endColumn?: number;
   node?: string;
 }
 
