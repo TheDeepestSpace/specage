@@ -668,4 +668,17 @@ describe('threads pending', () => {
       'no threads need a reply',
     );
   });
+  it('--json includes comment images', () => {
+    const d = tmp();
+    const sp = tmp();
+    writeFileSync(
+      join(sp, 'comments.yaml'),
+      'threads:\n  - {id: t-0001, node: a, node_hash: abcdef012345, state: open, comments: [{id: t-0001.1, author: me, at: "2026-01-01T00:00:00Z", body: why, images: [{type: image/png, data: iVBORw0KGgo=}]}]}\n',
+    );
+    const r = run(['threads', 'pending', d, '--spec-dir', sp, '--json']);
+    expect(r.code).toBe(0);
+    expect(JSON.stringify(JSON.parse(r.out))).toContain(
+      '"images":[{"type":"image/png","data":"iVBORw0KGgo="}]',
+    );
+  });
 });

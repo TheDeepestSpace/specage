@@ -722,6 +722,9 @@ body .cm-tooltip.cm-tooltip-autocomplete {
   gap: 6px;
   margin: 4px 0;
 }
+.thumbs:empty {
+  display: none;
+}
 .thumb {
   max-width: 96px;
   max-height: 96px;
