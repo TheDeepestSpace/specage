@@ -83,6 +83,14 @@ test('login with the passkey after logout', async () => {
   await expect(page).toHaveURL(/localhost:8788\/$/);
 });
 
+test('editor: statement lines get a state-coloured background', async () => {
+  await page.goto('/r/o/r');
+  const line = page.locator('.cm-line', { hasText: 'Limit magazine' });
+  await expect(line).toHaveClass(/st-line-verified/);
+  const bg = await line.evaluate((e) => getComputedStyle(e).backgroundColor);
+  expect(bg).not.toBe('rgba(0, 0, 0, 0)');
+});
+
 test('editor: gutter dots follow the trace, live hashing marks edits stale', async () => {
   await page.goto('/r/o/r');
   await expect(page.locator('.cm-content')).toContainText('Limit magazine');
