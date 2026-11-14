@@ -170,7 +170,14 @@ test('editor: in-editor spellcheck underlines misspellings on load, not ids/refs
   await page.keyboard.type(' mispelled');
   await expect(content).toContainText('mispelled'); // typing is untouched by spellcheck
   // in-editor check underlines the misspelling (debounced) but never ids/refs/markers
-  await expect(content.locator('.cm-spell-error')).toHaveText(['mispelled']);
+  // a lint range (e.g. on the unterminated last statement) may split the underline into several spans
+  await expect
+    .poll(() =>
+      content
+        .locator('.cm-spell-error')
+        .evaluateAll((els) => els.map((e) => e.textContent).join('')),
+    )
+    .toBe('mispelled');
   await page.keyboard.press('Control+z');
   expect(await content.innerText()).toBe(before);
 });
