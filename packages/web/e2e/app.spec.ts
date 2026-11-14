@@ -119,17 +119,19 @@ test('code panel draws a 100-column ruler', async () => {
   await page.screenshot({ path: 'test-results/ruler.png' });
 });
 
-test('editor: native spellcheck on for prose, off for ids/refs/markers', async () => {
+test('editor: in-editor spellcheck underlines misspellings on load, not ids/refs/markers', async () => {
   await page.goto('/r/o/r');
   const content = page.locator('.cm-content');
   await expect(content).toContainText('Limit magazine');
-  await expect(content).toHaveAttribute('spellcheck', 'true');
-  await expect(content.locator('.cm-spec-id').first()).toHaveAttribute('spellcheck', 'false');
+  await expect(content).toHaveAttribute('spellcheck', 'false'); // native check is off; ours is `.cm-spell-error`
+  await expect(content.locator('.cm-spec-id').first()).toBeVisible();
   const before = await content.innerText();
   await page.locator('.cm-line', { hasText: 'Limit magazine' }).click();
   await page.keyboard.press('End');
   await page.keyboard.type(' mispelled');
   await expect(content).toContainText('mispelled'); // typing is untouched by spellcheck
+  // in-editor check underlines the misspelling (debounced) but never ids/refs/markers
+  await expect(content.locator('.cm-spell-error')).toHaveText(['mispelled']);
   await page.keyboard.press('Control+z');
   expect(await content.innerText()).toBe(before);
 });
@@ -175,6 +177,18 @@ test('lint is shown on the client and enforced by the server (422)', async () =>
   await page.keyboard.press('Control+End');
   await page.keyboard.type('\nx @dup.id; y @dup.id;');
   await expect(page.locator('.cm-lintRange-error')).toBeVisible({ timeout: 3000 });
+  const deco = await page
+    .locator('.cm-lintRange-error')
+    .first()
+    .evaluate((el) => {
+      const cs = getComputedStyle(el);
+      return {
+        line: cs.textDecorationLine,
+        style: cs.textDecorationStyle,
+        color: cs.textDecorationColor,
+      };
+    });
+  expect(deco).toEqual({ line: 'underline', style: 'wavy', color: 'rgb(224, 168, 0)' });
   await page.locator('#save').click();
   await expect(page.locator('#diagnostics')).toContainText('E003');
   await expect(page.locator('#status')).toContainText('Not saved');
