@@ -175,6 +175,18 @@ test('lint is shown on the client and enforced by the server (422)', async () =>
   await page.keyboard.press('Control+End');
   await page.keyboard.type('\nx @dup.id; y @dup.id;');
   await expect(page.locator('.cm-lintRange-error')).toBeVisible({ timeout: 3000 });
+  const deco = await page
+    .locator('.cm-lintRange-error')
+    .first()
+    .evaluate((el) => {
+      const cs = getComputedStyle(el);
+      return {
+        line: cs.textDecorationLine,
+        style: cs.textDecorationStyle,
+        color: cs.textDecorationColor,
+      };
+    });
+  expect(deco).toEqual({ line: 'underline', style: 'wavy', color: 'rgb(224, 168, 0)' });
   await page.locator('#save').click();
   await expect(page.locator('#diagnostics')).toContainText('E003');
   await expect(page.locator('#status')).toContainText('Not saved');
