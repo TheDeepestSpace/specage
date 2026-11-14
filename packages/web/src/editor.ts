@@ -46,6 +46,7 @@ import {
   dotClass,
   dotPulse,
   dotStatus,
+  diagRange,
   nodeAtLine,
   slug,
   type Analysis,
@@ -55,6 +56,7 @@ import { h, setupBadge, store, warningBanner, type SetupInfo } from './dom.js';
 import grammarSrc from '../../../protocol/GRAMMAR.md?raw';
 import { renderMarkdown } from './markdown.js';
 import { openFor } from './questions.js';
+import { loadChecker, misspellings, type Checker } from './spellcheck.js';
 import { renderPane } from './tracepane.js';
 import { openCount } from './threads.js';
 import { aggregateText } from './viewer.js';
@@ -253,13 +255,7 @@ export async function renderEditor(root: HTMLElement, repo: string) {
         for (const [re, cls] of decoRe)
           for (const m of text.matchAll(re))
             if (m[0])
-              out.push(
-                Decoration.mark({
-                  class: cls,
-                  // only prose is spellchecked: ids, $refs, markers and escapes are not
-                  ...(cls === 'cm-spec-comment' ? {} : { attributes: { spellcheck: 'false' } }),
-                }).range(m.index!, m.index! + m[0].length),
-              );
+              out.push(Decoration.mark({ class: cls }).range(m.index!, m.index! + m[0].length));
         // brace pairs coloured by nesting depth
         for (const { at, depth } of scanBraces(text))
           out.push(
@@ -269,6 +265,45 @@ export async function renderEditor(root: HTMLElement, repo: string) {
             ),
           );
         return Decoration.set(out, true);
+      }
+    },
+    { decorations: (p) => p.decorations },
+  );
+
+  // Spellcheck prose (ids, $refs, markers, escapes excluded) on load and, debounced, on edit.
+  const spell = ViewPlugin.fromClass(
+    class {
+      decorations: DecorationSet = Decoration.none;
+      checker: Checker | null = null;
+      timer = 0;
+      destroyed = false;
+      constructor(readonly v: EditorView) {
+        void loadChecker().then((c) => {
+          if (this.destroyed) return;
+          this.checker = c;
+          this.run();
+        });
+      }
+      update(u: ViewUpdate) {
+        if (!u.docChanged) {
+          this.decorations = this.decorations.map(u.changes);
+          return;
+        }
+        this.decorations = this.decorations.map(u.changes);
+        window.clearTimeout(this.timer);
+        this.timer = window.setTimeout(() => this.run(), 300);
+      }
+      run() {
+        if (!this.checker) return;
+        const marks = misspellings(this.v.state.doc.toString(), this.checker).map((w) =>
+          Decoration.mark({ class: 'cm-spell-error' }).range(w.from, w.to),
+        );
+        this.decorations = Decoration.set(marks, true);
+        this.v.dispatch({}); // redraw with the new decorations
+      }
+      destroy() {
+        this.destroyed = true;
+        window.clearTimeout(this.timer);
       }
     },
     { decorations: (p) => p.decorations },
@@ -312,15 +347,14 @@ export async function renderEditor(root: HTMLElement, repo: string) {
 
   const lintSource = linter(
     (view): CmDiag[] => {
-      const doc = view.state.doc;
+      const text = view.state.doc.toString();
       const a = view.state.field(analysisField);
       return lint(a.spec, {
         retiredIds: state.trace.retired_ids,
         consumedLineage: state.trace.consumed_lineage,
+        source: text,
       }).map((d) => {
-        const line = doc.line(Math.min(Math.max(d.line, 1), doc.lines));
-        const from = Math.min(line.from + Math.max(d.column - 1, 0), line.to);
-        const to = Math.max(Math.min(line.to, from + 60), Math.min(from + 1, doc.length));
+        const { from, to } = diagRange(text, d);
         const diag: CmDiag = {
           from,
           to,
@@ -606,6 +640,7 @@ export async function renderEditor(root: HTMLElement, repo: string) {
         // only `{` auto-closes; ( [ ' " ` stay literal in spec prose
         EditorState.languageData.of(() => [{ closeBrackets: { brackets: ['{'] } }]),
         highlight,
+        spell,
         ruler,
         lintSource,
         lintGutter(),
@@ -654,8 +689,8 @@ export async function renderEditor(root: HTMLElement, repo: string) {
           }
           if (u.docChanged) refreshButtons();
         }),
-        // native browser spellcheck: red wavy underline on misspelled words, no text/caret changes
-        EditorView.contentAttributes.of({ 'aria-label': 'Spec editor', spellcheck: 'true' }),
+        // in-editor spellcheck (see `spell`); native spellcheck only fires on focus/edit, so it is off
+        EditorView.contentAttributes.of({ 'aria-label': 'Spec editor', spellcheck: 'false' }),
       ],
     }),
   });
