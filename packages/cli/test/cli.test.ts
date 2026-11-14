@@ -669,3 +669,34 @@ describe('threads pending', () => {
     );
   });
 });
+
+describe('review-start', () => {
+  const cfg = 'project: tbgwaf\nrepo: o/r\ndata_repo: o/specage-data\n';
+  it('resolves data repo and review branch from config', async () => {
+    const { resolveReviewTarget } = await import('../src/review.js');
+    expect(resolveReviewTarget(cfg)).toEqual({
+      dataRepo: 'o/specage-data',
+      project: 'tbgwaf',
+      branch: 'specages/tbgwaf/review',
+      base: 'specages/tbgwaf/trail',
+    });
+    expect(() => resolveReviewTarget('project: x\n')).toThrow(/data_repo/);
+    expect(() => resolveReviewTarget('project: ../x\ndata_repo: o/d\n')).toThrow(/project/);
+  });
+  it('pushes an empty review commit once per head sha', async () => {
+    const { resolveReviewTarget, startReview } = await import('../src/review.js');
+    const bare = tmp();
+    git(bare, 'init', '-q', '--bare');
+    const seed = tmp();
+    git(seed, 'init', '-q', '-b', 'specages/tbgwaf/trail');
+    git(seed, 'commit', '-q', '--allow-empty', '-m', 'trail');
+    git(seed, 'push', '-q', bare, 'specages/tbgwaf/trail');
+    const target = resolveReviewTarget(cfg);
+    const o = { remote: bare, target, repo: 'o/r', pr: 5, headSha: 'abc1234' };
+    expect(startReview(o)).toBe('pushed');
+    expect(startReview(o)).toBe('skipped');
+    expect(startReview({ ...o, headSha: 'def5678' })).toBe('pushed');
+    const log = git(bare, 'log', '--format=%s', 'specages/tbgwaf/review').trim().split('\n');
+    expect(log).toEqual(['review o/r#5', 'review o/r#5', 'trail']);
+  });
+});
