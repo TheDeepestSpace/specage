@@ -487,6 +487,17 @@ pre {
 .cm-spec-escape {
   color: var(--c-in_progress);
 }
+/* lint diagnostics: yellow wavy underline over the diagnostic's range (spellcheck stays red) */
+.cm-editor .cm-lintRange,
+.cm-editor .cm-lintRange-warning,
+.cm-editor .cm-lintRange-error {
+  background-image: none;
+  padding-bottom: 0;
+  text-decoration: underline wavy #e0a800;
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 3px;
+  text-decoration-skip-ink: none;
+}
 .cm-foldPlaceholder {
   background: var(--card);
   border: 1px solid var(--line);
