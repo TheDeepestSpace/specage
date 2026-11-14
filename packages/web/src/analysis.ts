@@ -166,3 +166,39 @@ export function diagRange(text: string, d: Diagnostic): { from: number; to: numb
   const end = hasEnd ? pos(d.endLine!, d.endColumn!) : Math.min(lineEnd(k), from + 60);
   return { from, to: Math.max(end, Math.min(from + 1, text.length)) };
 }
+
+/**
+ * 1-based line -> statement for the line-background tint. Leaves cover all their lines;
+ * scope statements cover only the lines up to and including the one with `{`, plus the `}` line.
+ * Interior lines belong to child statements (or to nothing).
+ */
+export function statementLines(a: Analysis): Map<number, SpecNode> {
+  const starts = [0];
+  for (let i = 0; i < a.text.length; i++) if (a.text[i] === '\n') starts.push(i + 1);
+  const lineOf = (off: number) => starts.filter((s) => s <= off).length;
+  const rows = a.text.split('\n');
+  // endLine can run onto a trailing blank line or the parent's `}`; trim back to the statement's own text
+  const lastOwn = (n: SpecNode) => {
+    let e = Math.min(n.endLine, rows.length);
+    while (e > n.line && /^\s*(\}\s*)?$/.test(rows[e - 1])) e--;
+    return e;
+  };
+  const out = new Map<number, SpecNode>();
+  const put = (from: number, to: number, n: SpecNode) => {
+    for (let l = from; l <= to; l++) if (!out.has(l)) out.set(l, n); // parents (visited first) win shared lines
+  };
+  const blockIdx = new Map<SpecNode, number>();
+  a.blockNodes?.forEach((n, i) => blockIdx.set(n, i));
+  for (const n of a.nodes) {
+    if (n.type === 'leaf') put(n.line, lastOwn(n), n);
+    else {
+      const i = blockIdx.get(n);
+      const b = i === undefined ? undefined : a.blocks[i];
+      if (b && b.close < a.text.length) {
+        put(n.line, lineOf(b.open), n);
+        put(lineOf(b.close), lineOf(b.close), n);
+      } else put(n.line, lastOwn(n), n);
+    }
+  }
+  return out;
+}

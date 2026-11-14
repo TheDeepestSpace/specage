@@ -715,3 +715,33 @@ body .cm-tooltip.cm-tooltip-autocomplete {
 .setup-pop .hint {
   opacity: 0.75;
 }
+
+/* statement line background: same state colour as the gutter dot, as a subtle tint */
+.cm-editor .cm-line.cm-stmt {
+  background: color-mix(in srgb, var(--stmt-c) 14%, transparent);
+}
+.cm-editor .cm-line.st-line-unknown,
+.cm-editor .cm-line.st-line-absent {
+  --stmt-c: var(--c-unknown);
+}
+.cm-editor .cm-line.st-line-planned {
+  --stmt-c: var(--c-planned);
+}
+.cm-editor .cm-line.st-line-in_progress {
+  --stmt-c: var(--c-in_progress);
+}
+.cm-editor .cm-line.st-line-implemented,
+.cm-editor .cm-line.st-line-verified {
+  --stmt-c: var(--c-implemented);
+}
+.cm-editor .cm-line.st-line-stale {
+  --stmt-c: var(--c-stale);
+}
+.cm-editor .cm-line.st-line-contradiction {
+  --stmt-c: var(--c-contradiction);
+}
+@media (prefers-color-scheme: dark) {
+  .cm-editor .cm-line.cm-stmt {
+    background: color-mix(in srgb, var(--stmt-c) 20%, transparent);
+  }
+}

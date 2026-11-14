@@ -83,6 +83,14 @@ test('login with the passkey after logout', async () => {
   await expect(page).toHaveURL(/localhost:8788\/$/);
 });
 
+test('editor: statement lines get a state-coloured background', async () => {
+  await page.goto('/r/o/r');
+  const line = page.locator('.cm-line', { hasText: 'Limit magazine' });
+  await expect(line).toHaveClass(/st-line-verified/);
+  const bg = await line.evaluate((e) => getComputedStyle(e).backgroundColor);
+  expect(bg).not.toBe('rgba(0, 0, 0, 0)');
+});
+
 test('editor: gutter dots follow the trace, live hashing marks edits stale', async () => {
   await page.goto('/r/o/r');
   await expect(page.locator('.cm-content')).toContainText('Limit magazine');
@@ -131,7 +139,10 @@ test('editor: in-editor spellcheck underlines misspellings on load, not ids/refs
   await page.keyboard.type(' mispelled');
   await expect(content).toContainText('mispelled'); // typing is untouched by spellcheck
   // in-editor check underlines the misspelling (debounced) but never ids/refs/markers
-  await expect(content.locator('.cm-spell-error')).toHaveText(['mispelled']);
+  // (a lint range can split one word's underline into several spans, so compare the joined text)
+  await expect
+    .poll(async () => (await content.locator('.cm-spell-error').allInnerTexts()).join(''))
+    .toBe('mispelled');
   await page.keyboard.press('Control+z');
   expect(await content.innerText()).toBe(before);
 });
