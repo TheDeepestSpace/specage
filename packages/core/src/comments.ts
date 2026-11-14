@@ -1,10 +1,32 @@
-import type { Thread, ThreadEvent } from './schemas.js';
+import type { CommentImage, Thread, ThreadEvent } from './schemas.js';
 
 export const MAX_COMMENT_LEN = 4000;
 
+export const MAX_IMAGES = 4;
+export const MAX_IMAGE_BYTES = 512 * 1024;
+export const IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'];
+
+/** Validate attached images (type allow-list, base64 payload, count and decoded size limits). */
+export function validateImages(images: unknown): CommentImage[] {
+  if (images === undefined) return [];
+  if (!Array.isArray(images)) throw new CommentError('images must be a list');
+  if (images.length > MAX_IMAGES) throw new CommentError(`at most ${MAX_IMAGES} images`);
+  return images.map((i) => {
+    if (!i || typeof i.type !== 'string' || typeof i.data !== 'string')
+      throw new CommentError('bad image');
+    if (!IMAGE_TYPES.includes(i.type)) throw new CommentError(`image type ${i.type} not allowed`);
+    if (!i.data || !/^[A-Za-z0-9+/]+={0,2}$/.test(i.data) || i.data.length % 4)
+      throw new CommentError('image data must be base64');
+    const bytes = (i.data.length / 4) * 3 - (i.data.match(/=*$/)![0].length || 0);
+    if (bytes > MAX_IMAGE_BYTES)
+      throw new CommentError(`image larger than ${MAX_IMAGE_BYTES / 1024} KB`);
+    return { type: i.type, data: i.data };
+  });
+}
+
 export type CommentOp =
-  | { op: 'create'; node: string; node_hash: string; body: string }
-  | { op: 'reply'; thread: string; body: string }
+  | { op: 'create'; node: string; node_hash: string; body: string; images?: CommentImage[] }
+  | { op: 'reply'; thread: string; body: string; images?: CommentImage[] }
   | { op: 'resolve'; thread: string }
   | { op: 'reopen'; thread: string };
 
@@ -27,6 +49,8 @@ export function applyOp(
   const body = 'body' in op ? op.body.trim() : '';
   if ('body' in op && (!body || body.length > MAX_COMMENT_LEN))
     throw new CommentError(`body must be 1-${MAX_COMMENT_LEN} characters`);
+  const images = 'body' in op ? validateImages(op.images) : [];
+  const extra = images.length ? { images } : {};
   const out = threads.map((t) => ({ ...t, comments: [...t.comments] }));
   if (op.op === 'create') {
     if (!(op.node in nodeHashes)) throw new CommentError(`unknown node ${op.node}`);
@@ -39,14 +63,14 @@ export function applyOp(
       node: op.node,
       node_hash: nodeHashes[op.node],
       state: 'open',
-      comments: [{ id: `${id}.1`, author, at, body }],
+      comments: [{ id: `${id}.1`, author, at, body, ...extra }],
     });
     return out;
   }
   const t = out.find((x) => x.id === op.thread);
   if (!t) throw new CommentError(`unknown thread ${op.thread}`);
   if (op.op === 'reply') {
-    t.comments.push({ id: `${t.id}.${t.comments.length + 1}`, author, at, body });
+    t.comments.push({ id: `${t.id}.${t.comments.length + 1}`, author, at, body, ...extra });
   } else if (op.op === 'resolve') {
     t.state = 'resolved';
     t.resolved_by = author;

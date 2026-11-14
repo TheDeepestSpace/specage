@@ -323,6 +323,22 @@ describe('API', () => {
     expect(stale.status).toBe(409);
     expect(((await stale.json()) as any).content).toContain('shoot.new');
   });
+  it('comments: images are stored with the comment and validated', async () => {
+    const h = harness();
+    await h.signup(auth());
+    const post = (b: unknown) => h.req('POST', '/api/r/o/r/comments', b);
+    const png = { type: 'image/png', data: 'iVBORw0KGgo=' };
+    const ok = await post({ op: 'create', node: 'shoot.cap', body: 'see', images: [png] });
+    expect(ok.status).toBe(200);
+    expect(((await ok.json()) as any).threads[0].comments[0].images).toEqual([png]);
+    expect(h.github.files['specages/r/spec:comments.yaml']).toContain('iVBORw0KGgo=');
+    const bad = (images: unknown) => post({ op: 'reply', thread: 't-0001', body: 'x', images });
+    expect((await bad([{ type: 'image/svg+xml', data: 'AAAA' }])).status).toBe(400);
+    expect((await bad([{ type: 'image/png', data: '<script>' }])).status).toBe(400);
+    expect((await bad([{ type: 'image/png', data: 'A'.repeat(800000) }])).status).toBe(400);
+    expect((await bad(Array(5).fill(png))).status).toBe(400);
+    expect((await bad([png, png])).status).toBe(200);
+  });
   it('comments: create, reply, resolve via spec-branch commits; agent events merge', async () => {
     const h = harness();
     await h.signup(auth());

@@ -156,11 +156,15 @@ export interface State {
 // Human-authored threads live in `comments.yaml` on the spec branch. Agents never write the spec
 // branch, so their replies/resolutions are events in `thread-events.yaml` on the trail branch;
 // `mergeThreads` folds both into the view shown to people.
+/** An image attached to a comment: MIME type plus base64 payload (see `validateImages`). */
+export const CommentImageSchema = z.object({ type: z.string(), data: z.string() });
+export type CommentImage = z.infer<typeof CommentImageSchema>;
 export const CommentSchema = z.object({
   id: z.string(),
   author: z.string(),
   at: z.string(),
   body: z.string(),
+  images: z.array(CommentImageSchema).optional(),
 });
 export const ThreadSchema = z.object({
   id: z.string(),

@@ -715,3 +715,26 @@ body .cm-tooltip.cm-tooltip-autocomplete {
 .setup-pop .hint {
   opacity: 0.75;
 }
+
+.thumbs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 4px 0;
+}
+.thumb {
+  max-width: 96px;
+  max-height: 96px;
+  border: 1px solid var(--border, #ccc);
+  border-radius: 4px;
+}
+.thumb-wrap {
+  position: relative;
+  display: inline-block;
+}
+.thumb-x {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  cursor: pointer;
+}
