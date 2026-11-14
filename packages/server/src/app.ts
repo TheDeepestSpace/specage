@@ -682,7 +682,7 @@ export function createApp({ env, db, github, now = Date.now }: Deps) {
     } catch {
       /* state is advisory for lint */
     }
-    const diags = lint(spec, { retiredIds: retired });
+    const diags = lint(spec, { retiredIds: retired, source: body.content });
     if (hasErrors(diags)) {
       db.audit('save', `${owner}/${repo}`, '422');
       return c.json({ diagnostics: diags }, 422);
