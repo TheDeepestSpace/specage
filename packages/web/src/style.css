@@ -419,6 +419,11 @@ pre {
 .cm-editor .cm-scroller .cm-dropCursor {
   border-left-color: var(--fg);
 }
+.cm-editor .cm-cursor,
+.cm-editor .cm-fat-cursor,
+.cm-editor .cm-cursorLayer {
+  animation: none !important;
+}
 .toggle {
   display: inline-flex;
   gap: 0.3rem;
