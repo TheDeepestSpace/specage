@@ -608,7 +608,7 @@ export async function renderEditor(root: HTMLElement, repo: string) {
   const scheme = new Compartment();
   // drawSelection is needed for visual-mode selections; only on while vim is on so the
   // default (native) caret/selection is unchanged otherwise.
-  const vimExt = () => [vim(), drawSelection()];
+  const vimExt = () => [vim(), drawSelection({ cursorBlinkRate: 0 })];
   const showMode = (mode: string, sub?: string) => {
     vimMode.textContent =
       `${mode}${sub === 'linewise' ? ' line' : sub === 'blockwise' ? ' block' : ''}`
@@ -634,6 +634,8 @@ export async function renderEditor(root: HTMLElement, repo: string) {
   });
   // `:w` (and `:write`) saves through the same path as Mod-s / the Save button
   Vim.defineEx('write', 'w', () => void save());
+  // `qq` in insert mode leaves it (only active while the vim extension is on)
+  Vim.map('qq', '<Esc>', 'insert');
 
   let tabEscape = false;
   const view: EditorView = new EditorView({
