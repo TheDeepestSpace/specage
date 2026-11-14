@@ -6,7 +6,7 @@ import {
   type Thread,
 } from '@specage/core/browser';
 import { ancestors, type Analysis } from './analysis.js';
-import { evidenceView } from './evidence.js';
+import { evidenceView, workRefs } from './evidence.js';
 import { h } from './dom.js';
 import { questionsSection } from './questions.js';
 import { threadsPanel } from './threads.js';
@@ -113,7 +113,9 @@ export function renderPane(
           return h(
             'li',
             {},
-            `${w.id}${w.issue ? ` · #${w.issue}` : ''}${w.pr ? ` · PR #${w.pr}` : ''} · ${w.state}${c.hash !== n.hash ? ' · claim is on an older hash' : ''}`,
+            w.id,
+            ...workRefs(w, ctx.repo),
+            ` · ${w.state}${c.hash !== n.hash ? ' · claim is on an older hash' : ''}`,
           );
         }),
       ),
