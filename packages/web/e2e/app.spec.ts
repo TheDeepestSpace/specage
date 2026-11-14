@@ -106,6 +106,45 @@ test('editor: gutter dots follow the trace, live hashing marks edits stale', asy
   await expect(page.locator('.dot[data-status="verified"]')).toHaveCount(1);
 });
 
+test('editor: braces auto-close, overtype, backspace pair, and colour by depth', async () => {
+  await page.goto('/r/o/r');
+  await expect(page.locator('.cm-content')).toContainText('Limit magazine');
+  await page.locator('.cm-content').click();
+  await page.keyboard.press('Control+End');
+  await page.keyboard.press('Enter');
+  await page.keyboard.type('{');
+  await expect(page.locator('.cm-line', { hasText: '{}' })).toHaveCount(1);
+  await page.keyboard.type('{');
+  await expect(page.locator('.cm-line', { hasText: '{{}}' })).toHaveCount(1);
+  await expect(page.locator('.cm-brace-d0')).toHaveCount(2);
+  await expect(page.locator('.cm-brace-d1')).toHaveCount(2);
+  await page.keyboard.type('}');
+  await page.keyboard.type('}');
+  await expect(page.locator('.cm-line', { hasText: '{{}}' })).toHaveCount(1);
+  await expect(page.locator('.cm-line', { hasText: '{{}}}' })).toHaveCount(0);
+  await page.keyboard.press('ArrowLeft');
+  await page.keyboard.press('ArrowLeft');
+  await page.keyboard.press('Backspace');
+  await expect(page.locator('.cm-line', { hasText: '{{}}' })).toHaveCount(0);
+  await expect(page.locator('.cm-line', { hasText: '{}' })).toHaveCount(1);
+  await page.keyboard.press('Control+z');
+  await page.keyboard.press('Control+z');
+});
+
+test('editor: only { auto-closes; ( and " insert no closing char', async () => {
+  await page.goto('/r/o/r');
+  await expect(page.locator('.cm-content')).toContainText('Limit magazine');
+  await page.locator('.cm-content').click();
+  await page.keyboard.press('Control+End');
+  await page.keyboard.press('Enter');
+  await page.keyboard.type('(');
+  await page.keyboard.type('"');
+  const last = page.locator('.cm-line').last();
+  await expect(last).toHaveText('("');
+  await page.keyboard.press('Control+z');
+  await page.keyboard.press('Control+z');
+});
+
 test('code panel draws a 100-column ruler', async () => {
   await page.goto('/r/o/r');
   await expect(page.locator('.cm-content')).toContainText('Limit magazine');

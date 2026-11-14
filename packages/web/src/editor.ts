@@ -1,6 +1,9 @@
+import { scanBraces } from './braces.js';
 import {
   acceptCompletion,
   autocompletion,
+  closeBrackets,
+  closeBracketsKeymap,
   completionKeymap,
   type CompletionContext,
   type CompletionResult,
@@ -281,6 +284,14 @@ export async function renderEditor(root: HTMLElement, repo: string) {
           for (const m of text.matchAll(re))
             if (m[0])
               out.push(Decoration.mark({ class: cls }).range(m.index!, m.index! + m[0].length));
+        // brace pairs coloured by nesting depth
+        for (const { at, depth } of scanBraces(text))
+          out.push(
+            Decoration.mark({ class: depth < 0 ? 'cm-brace-bad' : `cm-brace-d${depth}` }).range(
+              at,
+              at + 1,
+            ),
+          );
         return Decoration.set(out, true);
       }
     },
@@ -654,6 +665,9 @@ export async function renderEditor(root: HTMLElement, repo: string) {
         foldBySpec,
         folding,
         history(),
+        closeBrackets(),
+        // only `{` auto-closes; ( [ ' " ` stay literal in spec prose
+        EditorState.languageData.of(() => [{ closeBrackets: { brackets: ['{'] } }]),
         highlight,
         spell,
         ruler,
@@ -693,6 +707,7 @@ export async function renderEditor(root: HTMLElement, repo: string) {
           },
           ...foldKeymap,
           ...completionKeymap,
+          ...closeBracketsKeymap,
           ...defaultKeymap,
           ...historyKeymap,
         ]),
