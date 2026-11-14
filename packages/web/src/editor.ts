@@ -47,6 +47,7 @@ import {
   diagRange,
   nodeAtLine,
   slug,
+  statementLines,
   type Analysis,
 } from './analysis.js';
 import { conflictDialog } from './conflict.js';
@@ -204,6 +205,33 @@ export async function renderEditor(root: HTMLElement, repo: string) {
       },
     },
   });
+
+  // state-tinted background on every line of a statement (scope statements: header..`{` and `}` only)
+  const lineTint = ViewPlugin.fromClass(
+    class {
+      decorations: DecorationSet;
+      constructor(v: EditorView) {
+        this.decorations = this.build(v);
+      }
+      update(u: ViewUpdate) {
+        if (u.docChanged || u.transactions.some((t) => t.effects.some((e) => e.is(setState))))
+          this.decorations = this.build(u.view);
+      }
+      build(v: EditorView): DecorationSet {
+        const doc = v.state.doc;
+        const out: Range<Decoration>[] = [];
+        for (const [ln, n] of statementLines(v.state.field(analysisField)))
+          if (ln <= doc.lines)
+            out.push(
+              Decoration.line({ class: `cm-stmt st-line-${dotStatus(n, state)}` }).range(
+                doc.line(ln).from,
+              ),
+            );
+        return Decoration.set(out, true);
+      }
+    },
+    { decorations: (p) => p.decorations },
+  );
 
   const foldBySpec = foldService.of((st, from, to) => {
     const a = st.field(analysisField);
@@ -606,6 +634,7 @@ export async function renderEditor(root: HTMLElement, repo: string) {
         scheme.of(schemeTheme(darkMq.matches)),
         analysisField,
         lineNumbers(),
+        lineTint,
         statusGutter,
         questionGutter,
         commentGutter,
