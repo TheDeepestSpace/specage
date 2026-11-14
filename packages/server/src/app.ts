@@ -532,9 +532,15 @@ export function createApp({ env, db, github, now = Date.now }: Deps) {
     const str = (v: unknown) => (typeof v === 'string' ? v : '');
     const clean =
       op.op === 'create'
-        ? { op: 'create' as const, node: str(op.node), node_hash: '', body: str(op.body) }
+        ? {
+            op: 'create' as const,
+            node: str(op.node),
+            node_hash: '',
+            body: str(op.body),
+            images: op.images,
+          }
         : op.op === 'reply'
-          ? { op: 'reply' as const, thread: str(op.thread), body: str(op.body) }
+          ? { op: 'reply' as const, thread: str(op.thread), body: str(op.body), images: op.images }
           : { op: op.op as 'resolve' | 'reopen', thread: str(op.thread) };
     const author = db.cred(sess(c).cid)?.label ?? 'owner';
     const path = cfgOf(c).spec_file;

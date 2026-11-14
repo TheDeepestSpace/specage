@@ -728,6 +728,32 @@ body .cm-tooltip.cm-tooltip-autocomplete {
   opacity: 0.75;
 }
 
+.thumbs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 4px 0;
+}
+.thumbs:empty {
+  display: none;
+}
+.thumb {
+  max-width: 96px;
+  max-height: 96px;
+  border: 1px solid var(--border, #ccc);
+  border-radius: 4px;
+}
+.thumb-wrap {
+  position: relative;
+  display: inline-block;
+}
+.thumb-x {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  cursor: pointer;
+}
+
 /* statement line background: same state colour as the gutter dot, as a subtle tint */
 .cm-editor .cm-line.cm-stmt {
   background: color-mix(in srgb, var(--stmt-c) 14%, transparent);

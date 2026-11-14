@@ -246,3 +246,24 @@ test('editor: setup warning (unverified)', async ({ page }) => {
   await expect(page.locator('.setup-pop')).toContainText('unverified');
   await expect(page).toHaveScreenshot('setup-unverified.png');
 });
+
+test('comments: composer shows a pasted image thumbnail', async ({ page }) => {
+  await openEditor(page, undefined, 'Shooting', THREADS);
+  await page.locator('.cm-line', { hasText: '@shoot.burst.cap' }).first().click();
+  const box = page.locator('#threads textarea').last();
+  await box.fill('See this');
+  await box.evaluate((el) => {
+    // 1x1 red PNG, pasted as an image file
+    const b64 =
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==';
+    const bin = atob(b64);
+    const bytes = Uint8Array.from(bin, (c) => c.charCodeAt(0));
+    const dt = new DataTransfer();
+    dt.items.add(new File([bytes], 'x.png', { type: 'image/png' }));
+    el.dispatchEvent(
+      new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }),
+    );
+  });
+  await expect(page.locator('#threads .thumbs .thumb')).toHaveCount(1);
+  await expect(page.locator('#threads')).toHaveScreenshot('composer-thumbnail.png');
+});

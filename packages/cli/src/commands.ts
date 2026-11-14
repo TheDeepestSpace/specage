@@ -270,7 +270,9 @@ export function cmdThreads(a: Args): number {
   else
     for (const t of pending) {
       const last = t.comments[t.comments.length - 1];
-      out(`${t.id} on ${t.node}: ${last.author}: ${last.body}`);
+      out(
+        `${t.id} on ${t.node}: ${last.author}: ${last.body}${last.images?.length ? ` [${last.images.length} image(s); use --json]` : ''}`,
+      );
     }
   return 0;
 }
