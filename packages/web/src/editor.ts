@@ -16,6 +16,7 @@ import {
   foldKeymap,
   foldedRanges,
 } from '@codemirror/language';
+import { specTokens } from './highlight.js';
 import { linter, lintGutter, type Diagnostic as CmDiag } from '@codemirror/lint';
 import {
   Compartment,
@@ -258,16 +259,6 @@ export async function renderEditor(root: HTMLElement, repo: string) {
       h('span', { class: 'cm-foldPlaceholder', onclick }, `… ${prepared || ''}`),
   });
 
-  const decoRe: [RegExp, string][] = [
-    [/(?<=^|\s)#[^\n]*/gm, 'cm-spec-comment'],
-    [/\\[{};@#\\]|\\(?=[ \t]*\r?$)/gm, 'cm-spec-escape'],
-    [
-      /(?<!\\)@[a-z][a-z0-9_.-]*(?:\s*<-\s*[a-z][a-z0-9_.-]*(?:\s*,\s*[a-z][a-z0-9_.-]*)*)?/g,
-      'cm-spec-id',
-    ],
-    [/(?<![\w$\\])\$[a-z][a-z0-9_-]*(?:\.[a-z][a-z0-9_-]*)*/g, 'cm-spec-ref'],
-    [/(?<=(?:^|[;{}])\s*)(?:!\w+(?:[ \t]+\w+)?:|\?|>later:)/gm, 'cm-spec-marker'],
-  ];
   const highlight = ViewPlugin.fromClass(
     class {
       decorations: DecorationSet;
@@ -278,14 +269,11 @@ export async function renderEditor(root: HTMLElement, repo: string) {
         if (u.docChanged) this.decorations = this.build(u.view);
       }
       build(v: EditorView): DecorationSet {
-        const text = v.state.doc.toString();
-        const out: Range<Decoration>[] = [];
-        for (const [re, cls] of decoRe)
-          for (const m of text.matchAll(re))
-            if (m[0])
-              out.push(Decoration.mark({ class: cls }).range(m.index!, m.index! + m[0].length));
+        const out: Range<Decoration>[] = specTokens(v.state.doc.toString()).map((t) =>
+          Decoration.mark({ class: t.cls }).range(t.from, t.to),
+        );
         // brace pairs coloured by nesting depth
-        for (const { at, depth } of scanBraces(text))
+        for (const { at, depth } of scanBraces(v.state.doc.toString()))
           out.push(
             Decoration.mark({ class: depth < 0 ? 'cm-brace-bad' : `cm-brace-d${depth}` }).range(
               at,

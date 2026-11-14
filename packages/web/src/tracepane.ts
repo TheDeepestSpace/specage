@@ -8,6 +8,7 @@ import {
 import { ancestors, type Analysis } from './analysis.js';
 import { evidenceView } from './evidence.js';
 import { h } from './dom.js';
+import { specSegments } from './highlight.js';
 import { questionsSection } from './questions.js';
 import { threadsPanel } from './threads.js';
 import { bodyText, chip } from './viewer.js';
@@ -78,7 +79,13 @@ export function renderPane(
     'div',
     { class: 'pane-body' },
     h('div', { class: 'pane-head' }, chip(st), h('code', {}, n.hash)),
-    h('p', { class: 'ptext' }, bodyText({ ...n, children: [] } as any)),
+    h(
+      'p',
+      { class: 'ptext ptext-code' },
+      ...specSegments(bodyText({ ...n, children: [] } as any)).map((g) =>
+        g.cls ? h('span', { class: g.cls }, g.text) : g.text,
+      ),
+    ),
   );
   if (st === 'stale' && tr)
     body.append(

@@ -460,6 +460,12 @@ pre {
   border-radius: 50%;
   margin: 6px 3px;
 }
+.ptext-code {
+  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 13px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
 .cm-spec-id {
   color: var(--acc);
   font-weight: 600;
