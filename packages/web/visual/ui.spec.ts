@@ -90,6 +90,22 @@ test('editor: vim toggle (persisted, mode indicator, :w saves)', async ({ page }
   await page.keyboard.press('i');
   await expect(mode).toHaveText('INSERT');
   await page.keyboard.type('x');
+  await page.keyboard.type('qx');
+  await expect(page.locator('.cm-content')).toContainText('qx');
+  const noBlink = () =>
+    page.evaluate(
+      () =>
+        getComputedStyle(document.querySelector('.cm-cursorLayer')!).animationName === 'none' &&
+        [...document.querySelectorAll('.cm-cursor')].every(
+          (c) => getComputedStyle(c).animationName === 'none',
+        ),
+    );
+  expect(await noBlink()).toBe(true);
+  await page.keyboard.type('qq');
+  await expect(mode).toHaveText('NORMAL');
+  expect(await noBlink()).toBe(true);
+  await page.keyboard.press('i');
+  await expect(mode).toHaveText('INSERT');
   await page.keyboard.press('Escape');
   await expect(mode).toHaveText('NORMAL');
   await page.keyboard.press('V');
