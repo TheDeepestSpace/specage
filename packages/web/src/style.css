@@ -419,6 +419,13 @@ pre {
 .cm-editor .cm-scroller .cm-dropCursor {
   border-left-color: var(--fg);
 }
+/* Vim: insert mode draws a block like normal mode (.cm-fat-cursor). drawSelection's .cm-cursor
+   only exists while vim is on, so the native caret is untouched otherwise. */
+.cm-editor .cm-scroller .cm-cursor {
+  border-left: none;
+  width: 1ch;
+  background: color-mix(in srgb, var(--fg) 55%, transparent);
+}
 .cm-editor .cm-cursor,
 .cm-editor .cm-fat-cursor,
 .cm-editor .cm-cursorLayer {
