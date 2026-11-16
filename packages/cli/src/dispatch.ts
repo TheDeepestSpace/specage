@@ -12,7 +12,14 @@ export interface DispatchContext {
   kind: DispatchKind | 'planner';
   attempt: number;
   max_attempts: number;
+  /** check-in id (see `specage invocation`); callback.yml checks it out with the final status */
+  invocation?: string;
+  invocation_kind?: 'worker' | 'reviewer';
 }
+
+/** Invocation record kind for a dispatch kind. */
+export const invocationKind = (k: DispatchKind): 'worker' | 'reviewer' =>
+  k === 'review' ? 'reviewer' : 'worker';
 
 export interface DispatchOpts {
   kind: DispatchKind;
@@ -34,6 +41,8 @@ export interface DispatchOpts {
   max_attempts?: number;
   /** corrective text appended to the prompt context on a redispatch */
   correction?: string;
+  /** check-in id echoed into the context so the callback can check the run out */
+  invocation?: string;
 }
 
 export const DEFAULT_MAX_ATTEMPTS = 3;
@@ -65,6 +74,7 @@ export function buildDispatch(o: DispatchOpts): Record<string, unknown> {
     kind: o.kind,
     attempt,
     max_attempts: max,
+    ...(o.invocation ? { invocation: o.invocation, invocation_kind: invocationKind(o.kind) } : {}),
   };
   const d: Record<string, unknown> = {
     prompt: `${o.specage_repo}:prompts/${o.kind}.md@${o.prompt_ref}`,

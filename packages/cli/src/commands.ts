@@ -1,4 +1,5 @@
 import { cpSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { randomUUID } from 'node:crypto';
 import { join, resolve } from 'node:path';
 import YAML from 'yaml';
 import {
@@ -28,7 +29,12 @@ import {
   type SpecNode,
 } from '@specage/core';
 import { setInvocation, setWorkState } from './callback.js';
-import { buildDispatch, dispatchCommand, type DispatchContext } from './dispatch.js';
+import {
+  buildDispatch,
+  dispatchCommand,
+  invocationKind,
+  type DispatchContext,
+} from './dispatch.js';
 import { decide, type CallbackPayload, type PrFacts } from './verify.js';
 import {
   CliError,
@@ -473,7 +479,9 @@ export function cmdOutbox(a: Args): number {
     }
     const implement = entry.kind === 'implement';
     try {
+      const invocation = `inv-${randomUUID().slice(0, 8)}`;
       const dispatch = buildDispatch({
+        invocation,
         kind: implement ? 'implement' : 'amend',
         repo,
         data_repo: dataRepo,
@@ -493,6 +501,13 @@ export function cmdOutbox(a: Args): number {
       else {
         gh(cmd);
         out(`fired ${entry.id} -> #${entry.target}`);
+        // check-in: the dispatch is queued until callback.yml checks it out
+        setInvocation(cwd, {
+          id: invocation,
+          status: 'queued',
+          kind: invocationKind(implement ? 'implement' : 'amend'),
+          nodes: entry.spec_ids.map((s) => s.split('@')[0]),
+        });
         if (unfired)
           writeFileSync(
             join(cwd, f),
@@ -563,7 +578,9 @@ export function cmdCallback(a: Args): number {
     const intern = str(a, 'intern');
     if (!specage || !data || !intern)
       throw new CliError('redispatch needs --specage-repo, --data-repo and --intern');
+    const invocation = `inv-${randomUUID().slice(0, 8)}`;
     const dispatch = buildDispatch({
+      invocation,
       kind: prNum ? 'amend' : ctx.kind,
       repo: ctx.repo,
       data_repo: data,
@@ -582,7 +599,16 @@ export function cmdCallback(a: Args): number {
     const cmd = dispatchCommand(intern, str(a, 'workflow') ?? 'dispatcher.yml', dispatch);
     if (a.flags['dry-run']) out(`gh ${cmd.map((c) => JSON.stringify(c)).join(' ')}`);
     else gh(cmd);
-    if (stateDir) setWorkState(stateDir, at, 'in_progress');
+    if (stateDir) {
+      setWorkState(stateDir, at, 'in_progress');
+      if (!a.flags['dry-run'])
+        setInvocation(stateDir, {
+          id: invocation,
+          status: 'queued',
+          kind: invocationKind(prNum ? 'amend' : ctx.kind),
+          nodes: ctx.spec_ids.map((s) => s.split('@')[0]),
+        });
+    }
   } else if (stateDir && !setWorkState(stateDir, at, d.state))
     out(`no work item for issue=${issue ?? '-'} pr=${prNum ?? '-'}; state unchanged`);
   return 0;

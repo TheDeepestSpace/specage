@@ -701,4 +701,20 @@ describe('invocation check-in/check-out', () => {
     expect(y.items[0].finished).toBeTruthy();
     expect(() => setInvocation(dir, { id: 'r2', status: 'queued' })).toThrow();
   });
+
+  it('buildDispatch echoes the invocation id and kind into the context', async () => {
+    const { buildDispatch } = await import('../src/dispatch.js');
+    const d = buildDispatch({
+      kind: 'implement',
+      repo: 'o/r',
+      data_repo: 'o/d',
+      specage_repo: 'o/s',
+      prompt_ref: 'main',
+      project: 'p',
+      spec_ids: ['a@000000000000'],
+      issue: 1,
+      invocation: 'inv-1',
+    });
+    expect(d.context).toMatchObject({ invocation: 'inv-1', invocation_kind: 'worker' });
+  });
 });

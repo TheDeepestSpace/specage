@@ -286,7 +286,8 @@ test('comments: composer shows a pasted image thumbnail', async ({ page }) => {
 
 test('trace pane: dispatch invocation cards show kind and status', async ({ page }) => {
   await openEditor(page);
-  await page.locator('.cm-line', { hasText: 'burst' }).first().click();
+  await page.locator('.cm-line', { hasText: 'never exceeds the magazine' }).click();
+  await expect(page.locator('#crumbs strong')).toHaveText('shoot.burst.cap');
   const cards = page.locator('.inv-card');
   await expect(cards).toHaveCount(2);
   await expect(cards.first()).toContainText('worker');
