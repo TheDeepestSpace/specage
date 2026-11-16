@@ -28,7 +28,7 @@ jobs:
         with: {name: playwright-traces, path: packages/web/test-results}
       - name: Render the dogfood page (tbgwaf fixture + sample state)
         run: node packages/cli/dist/bin.js render --spec fixtures/tbgwaf/tbgwaf.specage --state fixtures/tbgwaf/state --out dogfood --repo ${{ github.repository }} --project tbgwaf
-      - uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         if: github.ref == 'refs/heads/main'
         with: {path: dogfood}
   visual:
