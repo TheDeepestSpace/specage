@@ -1,4 +1,5 @@
 import { execFileSync, spawnSync } from 'node:child_process';
+import YAML from 'yaml';
 import { buildDispatch } from '../src/dispatch.js';
 import { buildPlannerDispatch } from '@specage/core';
 import { decide, verifyPr, type PrFacts } from '../src/verify.js';
@@ -680,5 +681,24 @@ describe('threads pending', () => {
     expect(JSON.stringify(JSON.parse(r.out))).toContain(
       '"images":[{"type":"image/png","data":"iVBORw0KGgo="}]',
     );
+  });
+});
+
+describe('invocation check-in/check-out', () => {
+  it('upserts one record per dispatch id', async () => {
+    const { setInvocation } = await import('../src/callback.js');
+    const dir = mkdtempSync(join(tmpdir(), 'inv-'));
+    setInvocation(dir, { id: 'r1', kind: 'worker', status: 'in_progress', nodes: ['a'] });
+    setInvocation(dir, {
+      id: 'r1',
+      status: 'success',
+      runUrl: 'https://github.com/o/r/actions/runs/1',
+    });
+    const y = YAML.parse(readFileSync(join(dir, 'invocations.yaml'), 'utf8'));
+    expect(y.items).toHaveLength(1);
+    expect(y.items[0]).toMatchObject({ id: 'r1', kind: 'worker', status: 'success', nodes: ['a'] });
+    expect(y.items[0].started).toBeTruthy();
+    expect(y.items[0].finished).toBeTruthy();
+    expect(() => setInvocation(dir, { id: 'r2', status: 'queued' })).toThrow();
   });
 });

@@ -4,6 +4,7 @@ import YAML from 'yaml';
 import {
   CommentsFileSchema,
   QuestionsSchema,
+  InvocationsSchema,
   ThreadEventsSchema,
   TraceNodeSchema,
   TraceSchema,
@@ -48,6 +49,7 @@ function readYaml(p: string): unknown {
 export function parseState(raw: {
   trace?: unknown;
   work?: unknown;
+  invocations?: unknown;
   questions?: unknown;
   thread_events?: unknown;
 }): {
@@ -88,6 +90,8 @@ export function parseState(raw: {
     state: {
       trace: run('trace.yaml', TraceSchema, trace, {}),
       work: run('work.yaml', WorkSchema, raw.work, {}),
+      invocations: run<{ items: any[] }>('invocations.yaml', InvocationsSchema, raw.invocations, {})
+        .items,
       questions: run('questions.yaml', QuestionsSchema, raw.questions, []),
       thread_events: run('thread-events.yaml', ThreadEventsSchema, raw.thread_events, []),
     },
@@ -100,6 +104,7 @@ export function loadState(dir: string) {
   const r = parseState({
     trace: readYaml(join(dir, 'trace.yaml')),
     work: readYaml(join(dir, 'work.yaml')),
+    invocations: readYaml(join(dir, 'invocations.yaml')),
     questions: readYaml(join(dir, 'questions.yaml')),
     thread_events: readYaml(join(dir, 'thread-events.yaml')),
   });

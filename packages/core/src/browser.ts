@@ -7,6 +7,7 @@ export * from './diff.js';
 export * from './data.js';
 export type {
   State,
+  Invocation,
   Trace,
   Work,
   Question,

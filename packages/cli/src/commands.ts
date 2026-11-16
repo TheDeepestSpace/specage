@@ -3,6 +3,7 @@ import { join, resolve } from 'node:path';
 import YAML from 'yaml';
 import {
   OutboxSchema,
+  InvocationKinds,
   QuestionsSchema,
   anchorQuestion,
   implementEntry,
@@ -26,7 +27,7 @@ import {
   type Diagnostic,
   type SpecNode,
 } from '@specage/core';
-import { setWorkState } from './callback.js';
+import { setInvocation, setWorkState } from './callback.js';
 import { buildDispatch, dispatchCommand, type DispatchContext } from './dispatch.js';
 import { decide, type CallbackPayload, type PrFacts } from './verify.js';
 import {
@@ -274,6 +275,31 @@ export function cmdThreads(a: Args): number {
         `${t.id} on ${t.node}: ${last.author}: ${last.body}${last.images?.length ? ` [${last.images.length} image(s); use --json]` : ''}`,
       );
     }
+  return 0;
+}
+
+/** specage invocation --id <id> --status <s> [--kind <k>] [--nodes a,b] [--run-url <u>] [--state-dir <trail checkout>] */
+export function cmdInvocation(a: Args): number {
+  const id = str(a, 'id');
+  const status = str(a, 'status');
+  if (!id || !status || !['queued', 'in_progress', 'success', 'failure'].includes(status))
+    throw new CliError(
+      'usage: specage invocation --id <id> --status queued|in_progress|success|failure [--kind <k>] [--nodes a,b] [--run-url <u>] [--state-dir <dir>]',
+    );
+  const kind = str(a, 'kind');
+  if (kind && !InvocationKinds.includes(kind as never))
+    throw new CliError(`--kind must be one of ${InvocationKinds.join(', ')}`);
+  try {
+    setInvocation(str(a, 'state-dir') ?? '.', {
+      id,
+      status,
+      kind,
+      nodes: str(a, 'nodes')?.split(',').filter(Boolean),
+      runUrl: str(a, 'run-url'),
+    });
+  } catch (e) {
+    throw new CliError((e as Error).message);
+  }
   return 0;
 }
 

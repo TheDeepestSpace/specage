@@ -614,3 +614,24 @@ describe('pendingThreads', () => {
     expect(pendingThreads([th('t-0001', ['me', 'the-intern', 'me'])], [])).toHaveLength(1);
   });
 });
+
+describe('invocations state', () => {
+  it('parses every dispatch kind and status; drops invalid files with an issue', async () => {
+    const { parseState } = await import('../src/state.js');
+    const kinds = ['planner', 'worker', 'reviewer', 'ci_fixer', 'conflict_resolver'];
+    const statuses = ['queued', 'in_progress', 'success', 'failure'];
+    const items = kinds.map((kind, i) => ({
+      id: `i${i}`,
+      kind,
+      status: statuses[i % 4],
+      nodes: ['a'],
+    }));
+    const r = parseState({ invocations: { items } });
+    expect(r.state.invocations.map((i) => i.kind)).toEqual(kinds);
+    expect(parseState({}).state.invocations).toEqual([]);
+    const bad = parseState({
+      invocations: { items: [{ id: 'x', kind: 'nope', status: 'queued' }] },
+    });
+    expect(bad.issues.length).toBe(1);
+  });
+});

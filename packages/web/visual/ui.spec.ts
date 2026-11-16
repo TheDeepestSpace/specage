@@ -283,3 +283,13 @@ test('comments: composer shows a pasted image thumbnail', async ({ page }) => {
   await expect(page.locator('#threads .thumbs .thumb')).toHaveCount(1);
   await expect(page.locator('#threads')).toHaveScreenshot('composer-thumbnail.png');
 });
+
+test('trace pane: dispatch invocation cards show kind and status', async ({ page }) => {
+  await openEditor(page);
+  await page.locator('.cm-line', { hasText: 'burst' }).first().click();
+  const cards = page.locator('.inv-card');
+  await expect(cards).toHaveCount(2);
+  await expect(cards.first()).toContainText('worker');
+  await expect(cards.first()).toContainText('in progress');
+  await expect(cards.nth(1)).toContainText('success');
+});
