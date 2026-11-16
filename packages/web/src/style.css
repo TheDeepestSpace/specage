@@ -835,3 +835,23 @@ dialog.trace-modal {
 .cm-trace-hl {
   background: color-mix(in srgb, var(--c-implemented) 25%, transparent);
 }
+
+.inv-card {
+  border: 1px solid var(--border, #8886);
+  border-left-width: 4px;
+  border-radius: 4px;
+  padding: 4px 8px;
+  margin: 4px 0;
+}
+.inv-queued {
+  border-left-color: #888;
+}
+.inv-in_progress {
+  border-left-color: #d29922;
+}
+.inv-success {
+  border-left-color: #2da44e;
+}
+.inv-failure {
+  border-left-color: #cf222e;
+}

@@ -19,6 +19,8 @@ export interface Env {
   internRepo: string;
   /** repo hosting prompts/ and callback.yml for dispatch_agent runs */
   specageRepo: string;
+  /** HMAC secret of the data-repo push webhook (POST /hooks/trail); unset disables realtime push */
+  webhookSecret?: string;
   dbPath: string;
   webDist: string;
 }
@@ -63,6 +65,7 @@ export function loadEnv(e: NodeJS.ProcessEnv = process.env): Env {
     dataRepo,
     internRepo: e.INTERN_REPO ?? 'TheDeepestSpace/the-intern',
     specageRepo: e.SPECAGE_REPO ?? 'TheDeepestSpace/specage',
+    webhookSecret: e.TRAIL_WEBHOOK_SECRET || undefined,
     dbPath: e.DB_PATH ?? (dev ? resolve('specage-dev.db') : '/data/specage.db'),
     webDist: resolve(e.WEB_DIST ?? join(here, '..', '..', 'web', 'dist')),
   };

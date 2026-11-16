@@ -1,7 +1,8 @@
-import { createHash, randomBytes } from 'node:crypto';
+import { createHash, createHmac, randomBytes } from 'node:crypto';
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { extname, join, normalize } from 'node:path';
 import { Hono, type Context, type Next } from 'hono';
+import { streamSSE } from 'hono/streaming';
 import { deleteCookie, getCookie, setCookie } from 'hono/cookie';
 import {
   generateAuthenticationOptions,
@@ -143,6 +144,7 @@ export function createApp({ env, db, github, now = Date.now }: Deps) {
   app.use('*', async (c, next) => {
     const m = c.req.method;
     if (m === 'GET' || m === 'HEAD') return next();
+    if (new URL(c.req.url).pathname === '/hooks/trail') return next(); // GitHub webhook: HMAC-signed instead
     if (c.req.header('origin') !== env.publicUrl) return c.json({ error: 'bad origin' }, 403);
     if (c.req.header('x-specage') !== '1')
       return c.json({ error: 'missing X-Specage header' }, 403);
@@ -487,6 +489,58 @@ export function createApp({ env, db, github, now = Date.now }: Deps) {
     return prs;
   };
 
+  // ---- realtime: trail-branch commits (check-in/check-out of dispatches, etc.) push to open pages ----
+  const listeners = new Map<string, Set<() => void>>();
+  const notifyTrail = (project: string) => listeners.get(project)?.forEach((f) => f());
+  // GitHub push webhook on the data repo; signed with TRAIL_WEBHOOK_SECRET. A push to
+  // specages/<project>/trail wakes every SSE client watching <project>.
+  app.post('/hooks/trail', async (c) => {
+    const secret = env.webhookSecret;
+    const body = await c.req.text();
+    if (!secret) return c.json({ error: 'webhook not configured' }, 404);
+    const want = 'sha256=' + createHmac('sha256', secret).update(body).digest('hex');
+    if (!safeEqual(c.req.header('x-hub-signature-256') ?? '', want))
+      return c.json({ error: 'bad signature' }, 401);
+    let ref = '';
+    try {
+      ref = String(JSON.parse(body).ref ?? '');
+    } catch {
+      return c.json({ error: 'bad payload' }, 400);
+    }
+    const m = /^refs\/heads\/specages\/([\w.-]+)\/trail$/.exec(ref);
+    if (m) notifyTrail(m[1]);
+    return c.json({ ok: true });
+  });
+  app.get('/api/r/:owner/:repo/events', (c) => {
+    const { repo } = c.req.param();
+    return streamSSE(c, async (stream) => {
+      let wake: (() => void) | undefined;
+      let pending = false;
+      const fire = () => {
+        pending = true;
+        wake?.();
+      };
+      const set = listeners.get(repo) ?? new Set();
+      listeners.set(repo, set);
+      set.add(fire);
+      stream.onAbort(() => {
+        set.delete(fire);
+        wake?.();
+      });
+      await stream.writeSSE({ event: 'ready', data: '' });
+      while (!stream.aborted) {
+        if (!pending)
+          await Promise.race([new Promise<void>((r) => (wake = r)), stream.sleep(25_000)]);
+        if (stream.aborted) break;
+        if (pending) {
+          pending = false;
+          await stream.writeSSE({ event: 'trail', data: '' });
+        } else await stream.writeSSE({ event: 'ping', data: '' });
+      }
+      set.delete(fire);
+    });
+  });
+
   app.get('/api/r/:owner/:repo/state', async (c) => {
     const { owner, repo } = c.req.param();
     const f = async (p: string) => {
@@ -496,6 +550,7 @@ export function createApp({ env, db, github, now = Date.now }: Deps) {
     const { state, issues } = parseState({
       trace: await f('trace.yaml'),
       work: await f('work.yaml'),
+      invocations: await f('invocations.yaml'),
       questions: await f('questions.yaml'),
       thread_events: await f('thread-events.yaml'),
     });

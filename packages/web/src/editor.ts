@@ -73,6 +73,7 @@ const schemeTheme = (dark: boolean) => EditorView.theme({}, { dark });
 const emptyState = (): State => ({
   trace: { retired_ids: [], consumed_lineage: [], nodes: {} },
   work: { items: [] },
+  invocations: [],
   questions: [],
   thread_events: [],
 });
@@ -98,6 +99,7 @@ export async function renderEditor(root: HTMLElement, repo: string) {
         return {
           trace: s.trace,
           work: s.work,
+          invocations: s.invocations ?? [],
           questions: s.questions,
           thread_events: [],
         } as State;
@@ -106,6 +108,19 @@ export async function renderEditor(root: HTMLElement, repo: string) {
   } catch (e: any) {
     root.replaceChildren(h('p', { class: 'error' }, `Cannot open ${repo}: ${e.message}`));
     return;
+  }
+  // realtime: the server pushes an event when the trail branch gets a commit (dispatch check-in/out)
+  if (typeof EventSource !== 'undefined') {
+    const es = new EventSource(`/api/r/${repo}/events`);
+    es.addEventListener('trail', () => {
+      api('GET', `/api/r/${repo}/state`)
+        .then((s: any) => {
+          state = { ...state, work: s.work, invocations: s.invocations ?? [], trace: s.trace };
+          active = new Set<string>(s.active_nodes ?? []);
+          paneUpdate();
+        })
+        .catch(() => {});
+    });
   }
   let baseSha = spec.head_sha;
   let baseText = spec.content;

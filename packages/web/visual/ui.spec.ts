@@ -323,3 +323,14 @@ test('editor: imp/prf badges and modals', async ({ page }) => {
   await expect(dlg.locator('.trace-proofs li')).toHaveCount(2);
   await expect(page).toHaveScreenshot('trace-prf.png');
 });
+
+test('trace pane: dispatch invocation cards show kind and status', async ({ page }) => {
+  await openEditor(page);
+  await page.locator('.cm-line', { hasText: 'never exceeds the magazine' }).click();
+  await expect(page.locator('#crumbs strong')).toHaveText('shoot.burst.cap');
+  const cards = page.locator('.inv-card');
+  await expect(cards).toHaveCount(2);
+  await expect(cards.first()).toContainText('worker');
+  await expect(cards.first()).toContainText('in progress');
+  await expect(cards.nth(1)).toContainText('success');
+});
