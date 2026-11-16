@@ -18,3 +18,18 @@ describe('statementLines', () => {
     expect(lines('@blk { @a one; @b two }\n')).toEqual(['1:blk']);
   });
 });
+
+import { statementLastLines } from '../src/analysis.js';
+describe('statementLastLines', () => {
+  const last = (t: string) =>
+    [...statementLastLines(analyse(t))].map(([n, l]) => `${n.id}:${l}`).sort();
+  it('multi-line leaf: last own line, not trailing blank', () => {
+    expect(last('@a one \\\n two \\\n three;\n\n')).toEqual(['a:3']);
+  });
+  it('single-line unchanged', () => {
+    expect(last('@a one;\n@b two;\n')).toEqual(['a:1', 'b:2']);
+  });
+  it('scope: closing-brace line', () => {
+    expect(last('@blk head\n  more {\n  @a one;\n}\n')).toEqual(['a:3', 'blk:4']);
+  });
+});

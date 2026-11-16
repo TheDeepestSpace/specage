@@ -51,6 +51,7 @@ import {
   nodeAtLine,
   slug,
   statementLines,
+  statementLastLines,
   type Analysis,
 } from './analysis.js';
 import { conflictDialog } from './conflict.js';
@@ -270,11 +271,14 @@ export async function renderEditor(root: HTMLElement, repo: string) {
       build(v: EditorView): DecorationSet {
         const doc = v.state.doc;
         const out: Range<Decoration>[] = [];
-        for (const [ln, n] of statementLines(v.state.field(analysisField))) {
+        const an = v.state.field(analysisField);
+        const last = statementLastLines(an);
+        for (const [ln, n] of statementLines(an)) {
           if (ln > doc.lines || !n.id) continue;
           const b = badges(state.trace.nodes[n.id]?.evidence ?? []);
           for (const kind of ['imp', 'prf'] as const)
-            if (b[kind])
+            // imp: only on the statement's last line; prf keeps its per-line behavior
+            if (b[kind] && (kind === 'prf' || last.get(n) === ln))
               out.push(
                 Decoration.widget({ widget: new TraceBadge(kind, n.id), side: 1 }).range(
                   doc.line(ln).to,
