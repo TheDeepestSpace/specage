@@ -44,6 +44,16 @@ export const STATE = {
       },
     ],
   },
+  invocations: [
+    {
+      id: 'inv-1',
+      kind: 'worker',
+      status: 'in_progress',
+      nodes: ['shoot.burst.cap'],
+      run_url: 'https://github.com/acme/tbgwaf/actions/runs/1',
+    },
+    { id: 'inv-2', kind: 'reviewer', status: 'success', nodes: ['shoot.burst.cap'] },
+  ],
   questions: [],
   report: null,
 };

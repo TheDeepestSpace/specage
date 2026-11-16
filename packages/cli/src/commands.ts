@@ -1,8 +1,10 @@
 import { cpSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { randomUUID } from 'node:crypto';
 import { join, resolve } from 'node:path';
 import YAML from 'yaml';
 import {
   OutboxSchema,
+  InvocationKinds,
   QuestionsSchema,
   anchorQuestion,
   implementEntry,
@@ -26,8 +28,13 @@ import {
   type Diagnostic,
   type SpecNode,
 } from '@specage/core';
-import { setWorkState } from './callback.js';
-import { buildDispatch, dispatchCommand, type DispatchContext } from './dispatch.js';
+import { setInvocation, setWorkState } from './callback.js';
+import {
+  buildDispatch,
+  dispatchCommand,
+  invocationKind,
+  type DispatchContext,
+} from './dispatch.js';
 import { decide, type CallbackPayload, type PrFacts } from './verify.js';
 import {
   CliError,
@@ -277,6 +284,31 @@ export function cmdThreads(a: Args): number {
   return 0;
 }
 
+/** specage invocation --id <id> --status <s> [--kind <k>] [--nodes a,b] [--run-url <u>] [--state-dir <trail checkout>] */
+export function cmdInvocation(a: Args): number {
+  const id = str(a, 'id');
+  const status = str(a, 'status');
+  if (!id || !status || !['queued', 'in_progress', 'success', 'failure'].includes(status))
+    throw new CliError(
+      'usage: specage invocation --id <id> --status queued|in_progress|success|failure [--kind <k>] [--nodes a,b] [--run-url <u>] [--state-dir <dir>]',
+    );
+  const kind = str(a, 'kind');
+  if (kind && !InvocationKinds.includes(kind as never))
+    throw new CliError(`--kind must be one of ${InvocationKinds.join(', ')}`);
+  try {
+    setInvocation(str(a, 'state-dir') ?? '.', {
+      id,
+      status,
+      kind,
+      nodes: str(a, 'nodes')?.split(',').filter(Boolean),
+      runUrl: str(a, 'run-url'),
+    });
+  } catch (e) {
+    throw new CliError((e as Error).message);
+  }
+  return 0;
+}
+
 export function cmdCursor(a: Args): number {
   const c = cursorTag(str(a, 'tag'), str(a, 'cwd'), str(a, 'project'));
   out(c ?? '');
@@ -447,7 +479,9 @@ export function cmdOutbox(a: Args): number {
     }
     const implement = entry.kind === 'implement';
     try {
+      const invocation = `inv-${randomUUID().slice(0, 8)}`;
       const dispatch = buildDispatch({
+        invocation,
         kind: implement ? 'implement' : 'amend',
         repo,
         data_repo: dataRepo,
@@ -467,6 +501,13 @@ export function cmdOutbox(a: Args): number {
       else {
         gh(cmd);
         out(`fired ${entry.id} -> #${entry.target}`);
+        // check-in: the dispatch is queued until callback.yml checks it out
+        setInvocation(cwd, {
+          id: invocation,
+          status: 'queued',
+          kind: invocationKind(implement ? 'implement' : 'amend'),
+          nodes: entry.spec_ids.map((s) => s.split('@')[0]),
+        });
         if (unfired)
           writeFileSync(
             join(cwd, f),
@@ -537,7 +578,9 @@ export function cmdCallback(a: Args): number {
     const intern = str(a, 'intern');
     if (!specage || !data || !intern)
       throw new CliError('redispatch needs --specage-repo, --data-repo and --intern');
+    const invocation = `inv-${randomUUID().slice(0, 8)}`;
     const dispatch = buildDispatch({
+      invocation,
       kind: prNum ? 'amend' : ctx.kind,
       repo: ctx.repo,
       data_repo: data,
@@ -556,7 +599,16 @@ export function cmdCallback(a: Args): number {
     const cmd = dispatchCommand(intern, str(a, 'workflow') ?? 'dispatcher.yml', dispatch);
     if (a.flags['dry-run']) out(`gh ${cmd.map((c) => JSON.stringify(c)).join(' ')}`);
     else gh(cmd);
-    if (stateDir) setWorkState(stateDir, at, 'in_progress');
+    if (stateDir) {
+      setWorkState(stateDir, at, 'in_progress');
+      if (!a.flags['dry-run'])
+        setInvocation(stateDir, {
+          id: invocation,
+          status: 'queued',
+          kind: invocationKind(prNum ? 'amend' : ctx.kind),
+          nodes: ctx.spec_ids.map((s) => s.split('@')[0]),
+        });
+    }
   } else if (stateDir && !setWorkState(stateDir, at, d.state))
     out(`no work item for issue=${issue ?? '-'} pr=${prNum ?? '-'}; state unchanged`);
   return 0;

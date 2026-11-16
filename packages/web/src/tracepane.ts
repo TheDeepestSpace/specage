@@ -1,5 +1,6 @@
 import {
   nodeStatus,
+  type Invocation,
   type Question,
   type SpecNode,
   type State,
@@ -19,6 +20,37 @@ export interface PaneCtx {
   onThreads(t: Thread[]): void;
   onQuestions(q: Question[]): void;
   goto(n: SpecNode): void;
+}
+
+const KIND_LABEL: Record<Invocation['kind'], string> = {
+  planner: 'planner',
+  worker: 'worker',
+  reviewer: 'reviewer',
+  ci_fixer: 'CI fixer',
+  conflict_resolver: 'conflict resolver',
+};
+
+/** One card per dispatch touching the node: kind, status, link to the run. */
+export function invocationCards(invs: Invocation[], nodeId: string): HTMLElement | null {
+  const mine = invs.filter((i) => i.nodes.includes(nodeId));
+  if (!mine.length) return null;
+  return h(
+    'section',
+    { class: 'dispatches' },
+    h('h4', {}, 'Dispatches'),
+    ...mine.map((i) =>
+      h(
+        'div',
+        { class: `inv-card inv-${i.status}`, 'data-invocation': i.id },
+        h('strong', {}, KIND_LABEL[i.kind]),
+        ' ',
+        h('span', { class: 'inv-status' }, i.status.replace('_', ' ')),
+        ...(i.run_url && /^https:\/\/github\.com\//.test(i.run_url)
+          ? [' ', h('a', { href: i.run_url, target: '_blank', rel: 'noopener noreferrer' }, 'run')]
+          : []),
+      ),
+    ),
+  );
 }
 
 function proofsUnder(n: SpecNode, out: SpecNode[] = []): SpecNode[] {
@@ -121,6 +153,8 @@ export function renderPane(
       ),
     );
   }
+  const dc = invocationCards(ctx.state.invocations, n.id);
+  if (dc) body.append(dc);
   const nq = questionsSection(ctx.state.questions, n.id, qctx);
   if (nq) body.append(nq);
   body.append(
