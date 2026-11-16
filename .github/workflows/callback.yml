@@ -62,6 +62,18 @@ jobs:
             ${PR:+--pr "$PR"} ${ISSUE:+--issue "$ISSUE"} ${RUN_URL:+--run-url "$RUN_URL"} \
             --owner "$OWNER" --state-dir "$RUNNER_TEMP/trail" \
             --intern "$INTERN_REPO" --specage-repo "$SPECAGE_REPO" --data-repo "$DATA_REPO"
+      - name: Check out the invocation
+        # unconditional: records the dispatch's final status (invocation id/kind come from the dispatch context)
+        if: ${{ always() }}
+        env: {CONTEXT: '${{ inputs.context }}', STATUS: '${{ inputs.status }}', RUN_URL: '${{ inputs.run_url }}'}
+        run: |
+          id=$(jq -r '.invocation // empty' <<<"$CONTEXT")
+          [ -n "$id" ] || exit 0
+          [ "$STATUS" = success ] && st=success || st=failure
+          node packages/cli/dist/bin.js invocation --id "$id" --status "$st" \
+            --kind "$(jq -r '.invocation_kind // "worker"' <<<"$CONTEXT")" \
+            --nodes "$(jq -r '[.spec_ids[]? | split("@")[0]] | join(",")' <<<"$CONTEXT")" \
+            ${RUN_URL:+--run-url "$RUN_URL"} --state-dir "$RUNNER_TEMP/trail"
       - name: Commit the state change
         env: {GH_TOKEN: '${{ steps.app.outputs.token }}', STATUS: '${{ inputs.status }}'}
         run: |

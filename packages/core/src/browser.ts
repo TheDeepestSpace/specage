@@ -7,6 +7,7 @@ export * from './diff.js';
 export * from './data.js';
 export type {
   State,
+  Invocation,
   Trace,
   Work,
   Question,
@@ -16,7 +17,15 @@ export type {
   Comment,
   ThreadEvent,
 } from './schemas.js';
-export { mergeThreads, applyOp, MAX_COMMENT_LEN } from './comments.js';
+export {
+  mergeThreads,
+  applyOp,
+  validateImages,
+  MAX_COMMENT_LEN,
+  MAX_IMAGES,
+  MAX_IMAGE_BYTES,
+  IMAGE_TYPES,
+} from './comments.js';
 export type { CommentOp } from './comments.js';
 export {
   MAX_ANSWER_LEN,
