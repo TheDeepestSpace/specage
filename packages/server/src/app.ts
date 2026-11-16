@@ -458,6 +458,19 @@ export function createApp({ env, db, github, now = Date.now }: Deps) {
     return c.json({ content, head_sha: head, path });
   });
 
+  // read-only source file of the project repo at a pinned commit (evidence code viewer)
+  app.get('/api/r/:owner/:repo/file', async (c) => {
+    const { owner, repo } = c.req.param();
+    const path = c.req.query('path') ?? '';
+    const sha = c.req.query('commit') ?? '';
+    if (!/^[0-9a-f]{40}$/.test(sha)) return c.json({ error: 'commit must be a full sha' }, 400);
+    if (!path || path.startsWith('/') || path.split('/').some((x) => x === '..' || x === ''))
+      return c.json({ error: 'bad path' }, 400);
+    const content = await github.getRepoFile(`${owner}/${repo}`, path, sha);
+    if (content === null) return c.json({ error: 'file not found or not readable' }, 404);
+    return c.json({ content });
+  });
+
   // "active agent" = open work item in_progress whose PR has a queued/in-progress workflow run;
   // when runs are unreadable, any in_progress work item counts. Cached 30s per repo.
   const activeCache = new Map<string, { at: number; prs: number[] | null }>();

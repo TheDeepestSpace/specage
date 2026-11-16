@@ -788,3 +788,50 @@ body .cm-tooltip.cm-tooltip-autocomplete {
     background: color-mix(in srgb, var(--stmt-c) 20%, transparent);
   }
 }
+
+/* ---- statement trace badges + modals ---- */
+.trace-badge {
+  display: inline-block;
+  margin-left: 0.5rem;
+  padding: 0 4px;
+  border: 1px solid currentColor;
+  border-radius: 4px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 14px;
+  vertical-align: middle;
+  cursor: pointer;
+  user-select: none;
+}
+.trace-badge.imp {
+  color: var(--c-in_progress);
+}
+.trace-badge.prf {
+  color: var(--c-planned);
+}
+dialog.trace-modal {
+  width: min(900px, 90vw);
+}
+.trace-tabs {
+  display: flex;
+  gap: 0.25rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.5rem;
+}
+.trace-tab[aria-selected='true'] {
+  border-color: var(--acc);
+  font-weight: 600;
+}
+.trace-file {
+  max-height: 60vh;
+  overflow: auto;
+  border: 1px solid var(--line);
+  font-size: 12px;
+}
+.trace-file .cm-editor {
+  background: var(--card);
+}
+.cm-trace-hl {
+  background: color-mix(in srgb, var(--c-implemented) 25%, transparent);
+}

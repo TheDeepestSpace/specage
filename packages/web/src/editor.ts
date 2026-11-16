@@ -30,6 +30,7 @@ import {
   EditorView,
   GutterMarker,
   ViewPlugin,
+  WidgetType,
   drawSelection,
   gutter,
   hoverTooltip,
@@ -59,6 +60,8 @@ import { renderMarkdown } from './markdown.js';
 import { openFor } from './questions.js';
 import { loadChecker, misspellings, type Checker } from './spellcheck.js';
 import { renderPane } from './tracepane.js';
+import { badges } from './traces.js';
+import { openImpModal, openPrfModal } from './tracemodal.js';
 import { openCount } from './threads.js';
 import { aggregateText } from './viewer.js';
 
@@ -207,6 +210,67 @@ export async function renderEditor(root: HTMLElement, repo: string) {
       },
     },
   });
+
+  // small `imp` (orange) / `prf` (purple) badges at the end of a statement's first line; click opens the trace modal
+  class TraceBadge extends WidgetType {
+    constructor(
+      readonly kind: 'imp' | 'prf',
+      readonly id: string,
+    ) {
+      super();
+    }
+    eq(o: TraceBadge) {
+      return o.kind === this.kind && o.id === this.id;
+    }
+    toDOM() {
+      const s = document.createElement('span');
+      s.className = `trace-badge ${this.kind}`;
+      s.dataset.kind = this.kind;
+      s.title = this.kind === 'imp' ? 'implementation trace' : 'proof trace';
+      s.textContent = this.kind;
+      // keep the editor selection / vim mode untouched
+      s.addEventListener('mousedown', (e) => e.preventDefault());
+      s.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const ev = state.trace.nodes[this.id]?.evidence ?? [];
+        (this.kind === 'imp' ? openImpModal : openPrfModal)(repo, this.id, ev);
+      });
+      return s;
+    }
+    ignoreEvent() {
+      return true;
+    }
+  }
+  const traceBadges = ViewPlugin.fromClass(
+    class {
+      decorations: DecorationSet;
+      constructor(v: EditorView) {
+        this.decorations = this.build(v);
+      }
+      update(u: ViewUpdate) {
+        if (u.docChanged || u.transactions.some((t) => t.effects.some((e) => e.is(setState))))
+          this.decorations = this.build(u.view);
+      }
+      build(v: EditorView): DecorationSet {
+        const doc = v.state.doc;
+        const out: Range<Decoration>[] = [];
+        for (const [ln, n] of statementLines(v.state.field(analysisField))) {
+          if (ln > doc.lines || !n.id) continue;
+          const b = badges(state.trace.nodes[n.id]?.evidence ?? []);
+          for (const kind of ['imp', 'prf'] as const)
+            if (b[kind])
+              out.push(
+                Decoration.widget({ widget: new TraceBadge(kind, n.id), side: 1 }).range(
+                  doc.line(ln).to,
+                ),
+              );
+        }
+        return Decoration.set(out, true);
+      }
+    },
+    { decorations: (p) => p.decorations },
+  );
 
   // state-tinted background on every line of a statement (scope statements: header..`{` and `}` only)
   const lineTint = ViewPlugin.fromClass(
@@ -660,6 +724,7 @@ export async function renderEditor(root: HTMLElement, repo: string) {
         analysisField,
         lineNumbers(),
         lineTint,
+        traceBadges,
         statusGutter,
         questionGutter,
         commentGutter,
