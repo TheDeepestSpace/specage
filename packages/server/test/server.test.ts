@@ -823,4 +823,16 @@ describe('auto-merge setup detection', () => {
       gate: 'unverified',
     });
   });
+
+  it('serves project files only at a full commit sha', async () => {
+    const h = harness();
+    await h.signup(auth());
+    const sha = 'a'.repeat(40);
+    h.github.repoFiles.set(`o/r:${sha}:src/a.ts`, 'hello');
+    const get = (q: string) => h.req('GET', `/api/r/o/r/file?${q}`);
+    expect(await (await get(`path=src/a.ts&commit=${sha}`)).json()).toEqual({ content: 'hello' });
+    expect((await get('path=src/a.ts&commit=main')).status).toBe(400);
+    expect((await get(`path=../x&commit=${sha}`)).status).toBe(400);
+    expect((await get(`path=src/b.ts&commit=${sha}`)).status).toBe(404);
+  });
 });

@@ -48,6 +48,8 @@ export interface GitHub {
   /** repos the App installation can see (not limited to the data repo) */
   listInstallationRepos(): Promise<RepoInfo[]>;
   getRepo(repo: string): Promise<RepoInfo | null>;
+  /** a project-repo file at a pinned commit sha, or null when absent/unreadable */
+  getRepoFile(repo: string, path: string, sha: string): Promise<string | null>;
   /** auto-merge facts for a project repo's default branch; fields are null when unreadable */
   getMergeFacts(repo: string, branch: string): Promise<MergeFacts>;
   /**
@@ -374,6 +376,17 @@ export class RealGitHub implements GitHub {
     if (!r.ok) throw new Error(`GitHub ${r.status}`);
     const x = (await r.json()) as any;
     return { full_name: x.full_name, private: !!x.private, default_branch: x.default_branch };
+  }
+
+  async getRepoFile(repo: string, path: string, sha: string): Promise<string | null> {
+    const r = await this.wideReq(
+      'GET',
+      `/repos/${repo}/contents/${path.split('/').map(encodeURIComponent).join('/')}?ref=${encodeURIComponent(sha)}`,
+    );
+    if (r.status === 404 || r.status === 403) return null;
+    if (!r.ok) throw new Error(`GitHub ${r.status}`);
+    const j = (await r.json()) as any;
+    return typeof j.content === 'string' ? Buffer.from(j.content, 'base64').toString('utf8') : null;
   }
 
   async getMergeFacts(repo: string, branch: string): Promise<MergeFacts> {

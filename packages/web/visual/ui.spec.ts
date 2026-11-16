@@ -1,8 +1,14 @@
 import { expect, test, type Page } from '@playwright/test';
 import { mockApi, THREADS } from './mocks.js';
 
-async function openEditor(page: Page, spec?: string, text = 'Shooting', threads?: unknown[]) {
-  await mockApi(page, { spec, threads });
+async function openEditor(
+  page: Page,
+  spec?: string,
+  text = 'Shooting',
+  threads?: unknown[],
+  evidence?: unknown[],
+) {
+  await mockApi(page, { spec, threads, evidence });
   await page.goto('/r/acme/tbgwaf');
   await expect(page.locator('.cm-content')).toContainText(text);
   await expect(page.locator('.cm-gutters')).toBeVisible();
@@ -282,6 +288,40 @@ test('comments: composer shows a pasted image thumbnail', async ({ page }) => {
   });
   await expect(page.locator('#threads .thumbs .thumb')).toHaveCount(1);
   await expect(page.locator('#threads')).toHaveScreenshot('composer-thumbnail.png');
+});
+
+const C = 'c'.repeat(40);
+const EVIDENCE = [
+  { kind: 'code', ref: 'src/gun.ts#L3-L6', commit: C },
+  { kind: 'code', ref: 'src/gun.ts#L20', commit: C },
+  { kind: 'code', ref: 'src/missing.ts', commit: C },
+  { kind: 'test', ref: 'test/gun.test.ts', commit: C },
+  { kind: 'screenshot', ref: 'shots/burst.png', commit: C },
+];
+
+test('editor: imp/prf badges and modals', async ({ page }) => {
+  await openEditor(page, undefined, 'Shooting', undefined, EVIDENCE);
+  const line = page.locator('.cm-line', { hasText: 'never exceeds the magazine' });
+  const imp = line.locator('.trace-badge.imp');
+  const prf = line.locator('.trace-badge.prf');
+  await expect(imp).toHaveText('imp');
+  await expect(prf).toHaveText('prf');
+  await expect(page.locator('.trace-badge')).toHaveCount(2); // only nodes with evidence
+
+  await imp.click();
+  const dlg = page.locator('dialog.trace-modal');
+  await expect(dlg.locator('.trace-tab')).toHaveText(['src/gun.ts', 'src/missing.ts']);
+  await expect(dlg.locator('.trace-file')).toContainText('src/gun.ts line 3');
+  await expect(dlg.locator('.cm-trace-hl')).toHaveCount(5); // L3-L6 + L20
+  await expect(page).toHaveScreenshot('trace-imp.png');
+  await dlg.locator('.trace-tab', { hasText: 'missing' }).click();
+  await expect(dlg.locator('.error')).toContainText('Cannot load src/missing.ts');
+  await dlg.locator('.trace-close').click();
+  await expect(dlg).toHaveCount(0);
+
+  await prf.click();
+  await expect(dlg.locator('.trace-proofs li')).toHaveCount(2);
+  await expect(page).toHaveScreenshot('trace-prf.png');
 });
 
 test('trace pane: dispatch invocation cards show kind and status', async ({ page }) => {
