@@ -202,3 +202,10 @@ export function statementLines(a: Analysis): Map<number, SpecNode> {
   }
   return out;
 }
+
+/** Last line (1-based) of each statement, keyed by node: where end-of-statement badges go. */
+export function statementLastLines(a: Analysis): Map<SpecNode, number> {
+  const out = new Map<SpecNode, number>();
+  for (const [ln, n] of statementLines(a)) out.set(n, Math.max(out.get(n) ?? 0, ln));
+  return out;
+}
