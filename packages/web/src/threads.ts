@@ -1,4 +1,10 @@
-import { MAX_COMMENT_LEN, type Thread } from '@specage/core/browser';
+import {
+  IMAGE_TYPES,
+  MAX_COMMENT_LEN,
+  MAX_IMAGES,
+  MAX_IMAGE_BYTES,
+  type Thread,
+} from '@specage/core/browser';
 import { api, ApiError } from './api.js';
 import { h } from './dom.js';
 
@@ -24,6 +30,13 @@ export function threadView(t: Thread, actions?: HTMLElement | null): HTMLElement
         { class: 'comment' },
         h('div', { class: 'cmeta' }, h('strong', {}, c.author), ` · ${when(c.at)}`),
         h('div', { class: 'cbody' }, c.body),
+        c.images?.length
+          ? h(
+              'div',
+              { class: 'thumbs' },
+              ...c.images.filter((i) => IMAGE_TYPES.includes(i.type)).map(thumb),
+            )
+          : null,
       ),
     ),
     t.state === 'resolved' && t.resolved_by
@@ -32,6 +45,45 @@ export function threadView(t: Thread, actions?: HTMLElement | null): HTMLElement
     actions,
   );
 }
+
+export interface Attached {
+  type: string;
+  data: string;
+}
+
+/** Image files on a clipboard (`DataTransferItemList`-like). Non-image items are ignored. */
+export function clipboardImages(
+  items: ArrayLike<{ kind: string; type: string; getAsFile(): File | null }> | undefined,
+): File[] {
+  const out: File[] = [];
+  for (const it of Array.from(items ?? []))
+    if (it.kind === 'file' && it.type.startsWith('image/')) {
+      const f = it.getAsFile();
+      if (f) out.push(f);
+    }
+  return out;
+}
+
+/** Why `file` cannot be attached next to `count` existing images, or null. */
+export const imageProblem = (file: { type: string; size: number }, count: number) =>
+  count >= MAX_IMAGES
+    ? `at most ${MAX_IMAGES} images`
+    : !IMAGE_TYPES.includes(file.type)
+      ? `image type ${file.type} not allowed`
+      : file.size > MAX_IMAGE_BYTES
+        ? `image larger than ${MAX_IMAGE_BYTES / 1024} KB`
+        : null;
+
+const toBase64 = (f: File) =>
+  new Promise<string>((res, rej) => {
+    const r = new FileReader();
+    r.onload = () => res(String(r.result).split(',')[1] ?? '');
+    r.onerror = () => rej(r.error);
+    r.readAsDataURL(f);
+  });
+
+const thumb = (i: Attached) =>
+  h('img', { class: 'thumb', alt: 'attached image', src: `data:${i.type};base64,${i.data}` });
 
 export interface ThreadsCtx {
   repo: string;
@@ -58,13 +110,65 @@ export function threadsPanel(
       err.textContent = e instanceof ApiError ? e.message : String(e);
     }
   };
-  const box = (label: string) =>
-    h('textarea', {
+  /** Textarea whose pasted images become removable thumbnails (shown in `strip`). */
+  const box = (label: string) => {
+    const images: Attached[] = [];
+    const strip = h('div', { class: 'thumbs' });
+    const draw = () => {
+      strip.replaceChildren(
+        ...images.map((i) =>
+          h(
+            'span',
+            { class: 'thumb-wrap' },
+            thumb(i),
+            h(
+              'button',
+              {
+                class: 'thumb-x',
+                type: 'button',
+                'aria-label': 'Remove image',
+                onclick: () => {
+                  images.splice(images.indexOf(i), 1);
+                  draw();
+                },
+              },
+              '×',
+            ),
+          ),
+        ),
+      );
+    };
+    const ta = h('textarea', {
       rows: '2',
       maxlength: String(MAX_COMMENT_LEN),
       placeholder: label,
       'aria-label': label,
-    }) as HTMLTextAreaElement;
+      onpaste: (e: ClipboardEvent) => {
+        const files = clipboardImages(e.clipboardData?.items);
+        if (!files.length) return; // plain text paste stays normal
+        e.preventDefault();
+        err.textContent = '';
+        void (async () => {
+          for (const f of files) {
+            const p = imageProblem(f, images.length);
+            if (p) {
+              err.textContent = p;
+              continue;
+            }
+            images.push({ type: f.type, data: await toBase64(f) });
+          }
+          draw();
+        })();
+      },
+    }) as HTMLTextAreaElement & { images: Attached[]; strip: HTMLElement };
+    ta.images = images;
+    ta.strip = strip;
+    return ta;
+  };
+  const payload = (b: { images: Attached[] }, extra: Record<string, unknown>) => ({
+    ...extra,
+    ...(b.images.length ? { images: b.images } : {}),
+  });
 
   const mine = ctx.threads.filter((t) => t.node === node.id);
   const sel = h(
@@ -88,13 +192,15 @@ export function threadsPanel(
       'div',
       { class: 'thread-actions' },
       t.state === 'open' ? reply : null,
+      t.state === 'open' ? reply.strip : null,
       t.state === 'open'
         ? h(
             'button',
             {
               class: 'btn',
               onclick: () =>
-                reply.value.trim() && send({ op: 'reply', thread: t.id, body: reply.value }),
+                reply.value.trim() &&
+                send(payload(reply, { op: 'reply', thread: t.id, body: reply.value })),
             },
             'Reply',
           )
@@ -115,12 +221,14 @@ export function threadsPanel(
   const nb = box('Start a thread on this node…');
   panel.append(
     nb,
+    nb.strip,
     h(
       'button',
       {
         class: 'btn',
         id: 'new-thread',
-        onclick: () => nb.value.trim() && send({ op: 'create', node: node.id, body: nb.value }),
+        onclick: () =>
+          nb.value.trim() && send(payload(nb, { op: 'create', node: node.id, body: nb.value })),
       },
       'Comment',
     ),

@@ -419,6 +419,11 @@ pre {
 .cm-editor .cm-scroller .cm-dropCursor {
   border-left-color: var(--fg);
 }
+.cm-editor .cm-cursor,
+.cm-editor .cm-fat-cursor,
+.cm-editor .cm-cursorLayer {
+  animation: none !important;
+}
 .toggle {
   display: inline-flex;
   gap: 0.3rem;
@@ -486,6 +491,18 @@ pre {
 }
 .cm-spec-escape {
   color: var(--c-in_progress);
+}
+.cm-brace-d0 {
+  color: #d4a000;
+}
+.cm-brace-d1 {
+  color: #c13fc1;
+}
+.cm-brace-d2 {
+  color: #1f7fd6;
+}
+.cm-brace-bad {
+  color: var(--c-contradiction);
 }
 /* lint diagnostics: yellow wavy underline over the diagnostic's range (spellcheck stays red) */
 .cm-editor .cm-lintRange,
@@ -714,4 +731,127 @@ body .cm-tooltip.cm-tooltip-autocomplete {
 }
 .setup-pop .hint {
   opacity: 0.75;
+}
+
+.thumbs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 4px 0;
+}
+.thumbs:empty {
+  display: none;
+}
+.thumb {
+  max-width: 96px;
+  max-height: 96px;
+  border: 1px solid var(--border, #ccc);
+  border-radius: 4px;
+}
+.thumb-wrap {
+  position: relative;
+  display: inline-block;
+}
+.thumb-x {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  cursor: pointer;
+}
+
+/* statement line background: same state colour as the gutter dot, as a subtle tint */
+.cm-editor .cm-line.cm-stmt {
+  background: color-mix(in srgb, var(--stmt-c) 14%, transparent);
+}
+.cm-editor .cm-line.st-line-unknown,
+.cm-editor .cm-line.st-line-absent {
+  --stmt-c: var(--c-unknown);
+}
+.cm-editor .cm-line.st-line-planned {
+  --stmt-c: var(--c-planned);
+}
+.cm-editor .cm-line.st-line-in_progress {
+  --stmt-c: var(--c-in_progress);
+}
+.cm-editor .cm-line.st-line-implemented,
+.cm-editor .cm-line.st-line-verified {
+  --stmt-c: var(--c-implemented);
+}
+.cm-editor .cm-line.st-line-stale {
+  --stmt-c: var(--c-stale);
+}
+.cm-editor .cm-line.st-line-contradiction {
+  --stmt-c: var(--c-contradiction);
+}
+@media (prefers-color-scheme: dark) {
+  .cm-editor .cm-line.cm-stmt {
+    background: color-mix(in srgb, var(--stmt-c) 20%, transparent);
+  }
+}
+
+/* ---- statement trace badges + modals ---- */
+.trace-badge {
+  display: inline-block;
+  margin-left: 0.5rem;
+  padding: 0 4px;
+  border: 1px solid currentColor;
+  border-radius: 4px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 14px;
+  vertical-align: middle;
+  cursor: pointer;
+  user-select: none;
+}
+.trace-badge.imp {
+  color: var(--c-in_progress);
+}
+.trace-badge.prf {
+  color: var(--c-planned);
+}
+dialog.trace-modal {
+  width: min(900px, 90vw);
+}
+.trace-tabs {
+  display: flex;
+  gap: 0.25rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.5rem;
+}
+.trace-tab[aria-selected='true'] {
+  border-color: var(--acc);
+  font-weight: 600;
+}
+.trace-file {
+  max-height: 60vh;
+  overflow: auto;
+  border: 1px solid var(--line);
+  font-size: 12px;
+}
+.trace-file .cm-editor {
+  background: var(--card);
+}
+.cm-trace-hl {
+  background: color-mix(in srgb, var(--c-implemented) 25%, transparent);
+}
+
+.inv-card {
+  border: 1px solid var(--border, #8886);
+  border-left-width: 4px;
+  border-radius: 4px;
+  padding: 4px 8px;
+  margin: 4px 0;
+}
+.inv-queued {
+  border-left-color: #888;
+}
+.inv-in_progress {
+  border-left-color: #d29922;
+}
+.inv-success {
+  border-left-color: #2da44e;
+}
+.inv-failure {
+  border-left-color: #cf222e;
 }

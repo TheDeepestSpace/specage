@@ -1,7 +1,8 @@
-import { createHash, randomBytes } from 'node:crypto';
+import { createHash, createHmac, randomBytes } from 'node:crypto';
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { extname, join, normalize } from 'node:path';
 import { Hono, type Context, type Next } from 'hono';
+import { streamSSE } from 'hono/streaming';
 import { deleteCookie, getCookie, setCookie } from 'hono/cookie';
 import {
   generateAuthenticationOptions,
@@ -143,6 +144,7 @@ export function createApp({ env, db, github, now = Date.now }: Deps) {
   app.use('*', async (c, next) => {
     const m = c.req.method;
     if (m === 'GET' || m === 'HEAD') return next();
+    if (new URL(c.req.url).pathname === '/hooks/trail') return next(); // GitHub webhook: HMAC-signed instead
     if (c.req.header('origin') !== env.publicUrl) return c.json({ error: 'bad origin' }, 403);
     if (c.req.header('x-specage') !== '1')
       return c.json({ error: 'missing X-Specage header' }, 403);
@@ -458,6 +460,19 @@ export function createApp({ env, db, github, now = Date.now }: Deps) {
     return c.json({ content, head_sha: head, path });
   });
 
+  // read-only source file of the project repo at a pinned commit (evidence code viewer)
+  app.get('/api/r/:owner/:repo/file', async (c) => {
+    const { owner, repo } = c.req.param();
+    const path = c.req.query('path') ?? '';
+    const sha = c.req.query('commit') ?? '';
+    if (!/^[0-9a-f]{40}$/.test(sha)) return c.json({ error: 'commit must be a full sha' }, 400);
+    if (!path || path.startsWith('/') || path.split('/').some((x) => x === '..' || x === ''))
+      return c.json({ error: 'bad path' }, 400);
+    const content = await github.getRepoFile(`${owner}/${repo}`, path, sha);
+    if (content === null) return c.json({ error: 'file not found or not readable' }, 404);
+    return c.json({ content });
+  });
+
   // "active agent" = open work item in_progress whose PR has a queued/in-progress workflow run;
   // when runs are unreadable, any in_progress work item counts. Cached 30s per repo.
   const activeCache = new Map<string, { at: number; prs: number[] | null }>();
@@ -474,6 +489,58 @@ export function createApp({ env, db, github, now = Date.now }: Deps) {
     return prs;
   };
 
+  // ---- realtime: trail-branch commits (check-in/check-out of dispatches, etc.) push to open pages ----
+  const listeners = new Map<string, Set<() => void>>();
+  const notifyTrail = (project: string) => listeners.get(project)?.forEach((f) => f());
+  // GitHub push webhook on the data repo; signed with TRAIL_WEBHOOK_SECRET. A push to
+  // specages/<project>/trail wakes every SSE client watching <project>.
+  app.post('/hooks/trail', async (c) => {
+    const secret = env.webhookSecret;
+    const body = await c.req.text();
+    if (!secret) return c.json({ error: 'webhook not configured' }, 404);
+    const want = 'sha256=' + createHmac('sha256', secret).update(body).digest('hex');
+    if (!safeEqual(c.req.header('x-hub-signature-256') ?? '', want))
+      return c.json({ error: 'bad signature' }, 401);
+    let ref = '';
+    try {
+      ref = String(JSON.parse(body).ref ?? '');
+    } catch {
+      return c.json({ error: 'bad payload' }, 400);
+    }
+    const m = /^refs\/heads\/specages\/([\w.-]+)\/trail$/.exec(ref);
+    if (m) notifyTrail(m[1]);
+    return c.json({ ok: true });
+  });
+  app.get('/api/r/:owner/:repo/events', (c) => {
+    const { repo } = c.req.param();
+    return streamSSE(c, async (stream) => {
+      let wake: (() => void) | undefined;
+      let pending = false;
+      const fire = () => {
+        pending = true;
+        wake?.();
+      };
+      const set = listeners.get(repo) ?? new Set();
+      listeners.set(repo, set);
+      set.add(fire);
+      stream.onAbort(() => {
+        set.delete(fire);
+        wake?.();
+      });
+      await stream.writeSSE({ event: 'ready', data: '' });
+      while (!stream.aborted) {
+        if (!pending)
+          await Promise.race([new Promise<void>((r) => (wake = r)), stream.sleep(25_000)]);
+        if (stream.aborted) break;
+        if (pending) {
+          pending = false;
+          await stream.writeSSE({ event: 'trail', data: '' });
+        } else await stream.writeSSE({ event: 'ping', data: '' });
+      }
+      set.delete(fire);
+    });
+  });
+
   app.get('/api/r/:owner/:repo/state', async (c) => {
     const { owner, repo } = c.req.param();
     const f = async (p: string) => {
@@ -483,6 +550,7 @@ export function createApp({ env, db, github, now = Date.now }: Deps) {
     const { state, issues } = parseState({
       trace: await f('trace.yaml'),
       work: await f('work.yaml'),
+      invocations: await f('invocations.yaml'),
       questions: await f('questions.yaml'),
       thread_events: await f('thread-events.yaml'),
     });
@@ -532,9 +600,15 @@ export function createApp({ env, db, github, now = Date.now }: Deps) {
     const str = (v: unknown) => (typeof v === 'string' ? v : '');
     const clean =
       op.op === 'create'
-        ? { op: 'create' as const, node: str(op.node), node_hash: '', body: str(op.body) }
+        ? {
+            op: 'create' as const,
+            node: str(op.node),
+            node_hash: '',
+            body: str(op.body),
+            images: op.images,
+          }
         : op.op === 'reply'
-          ? { op: 'reply' as const, thread: str(op.thread), body: str(op.body) }
+          ? { op: 'reply' as const, thread: str(op.thread), body: str(op.body), images: op.images }
           : { op: op.op as 'resolve' | 'reopen', thread: str(op.thread) };
     const author = db.cred(sess(c).cid)?.label ?? 'owner';
     const path = cfgOf(c).spec_file;

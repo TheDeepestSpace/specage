@@ -169,6 +169,13 @@ class Parser {
   }
 
   private parseStatement(parent: SpecNode | null, depth: number): SpecNode | null {
+    // variable declaration: `@name=` immediately followed by the statement
+    let variable: string | undefined;
+    const decl = /^@([A-Za-z0-9]+)=/.exec(this.src.slice(this.pos, this.pos + 256));
+    if (decl) {
+      variable = decl[1];
+      for (let i = 0; i < decl[0].length; i++) this.next();
+    }
     const raw = this.readText();
     const text = normalize(raw.text);
     let id: string | null = null;
@@ -233,6 +240,7 @@ class Parser {
       line: raw.line,
       column: raw.column,
       endLine: this.line,
+      ...(variable !== undefined ? { variable } : {}),
     });
     if (term === ';') {
       this.next();
@@ -272,10 +280,36 @@ export function computeSubtreeHashes(n: SpecNode): void {
   n.subtreeHash = sha12(n.hash + '\n' + n.children.map((c) => c.subtreeHash).join('\n'));
 }
 
+/** `$name` candidate for a variable reference. */
+const VAR_REF_RE = /(?<![\w$])\$([A-Za-z0-9]+)(?![\w-])/g;
+
+/**
+ * Resolve `$name` references against variables in scope. A variable declared
+ * in a block is visible to all statements of that block (any order) and their
+ * descendants, not to siblings of the block or its parents. Child declarations
+ * shadow; the last duplicate in one scope wins. Variables take precedence over
+ * `$id` refs: resolved names are removed from `refs`.
+ */
+function resolveVariables(nodes: SpecNode[], outer: Set<string>[]): void {
+  const here = new Set<string>();
+  for (const n of nodes) if (n.variable !== undefined) here.add(n.variable);
+  const scopes = [...outer, here];
+  const inScope = (name: string) => scopes.some((s) => s.has(name));
+  for (const n of nodes) {
+    const used = [...new Set([...n.text.matchAll(VAR_REF_RE)].map((m) => m[1]))].filter(inScope);
+    if (used.length) {
+      n.varRefs = used;
+      n.refs = n.refs.filter((r) => !used.includes(r));
+    }
+    resolveVariables(n.children, scopes);
+  }
+}
+
 export function parse(src: string): Spec {
   const p = new Parser(src.replace(/^\uFEFF/, ''));
   const roots = p.parseFile();
   for (const r of roots) computeSubtreeHashes(r);
+  resolveVariables(roots, []);
   return { roots, diagnostics: p.diags };
 }
 

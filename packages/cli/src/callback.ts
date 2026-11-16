@@ -27,3 +27,39 @@ export function setWorkState(
   if (hit) writeFileSync(file, String(doc));
   return hit;
 }
+
+export interface InvocationUpdate {
+  id: string;
+  kind?: string;
+  status: string;
+  nodes?: string[];
+  runUrl?: string;
+  now?: string;
+}
+
+/**
+ * Check-in / check-out: upsert one dispatch record in `<dir>/invocations.yaml`.
+ * Check-in sets queued/in_progress; check-out sets success/failure (and `finished`).
+ */
+export function setInvocation(dir: string, u: InvocationUpdate): void {
+  const file = join(dir, 'invocations.yaml');
+  const doc = existsSync(file)
+    ? YAML.parseDocument(readFileSync(file, 'utf8'))
+    : new YAML.Document();
+  const root = (doc.toJS() as { items?: any[] } | null) ?? {};
+  const items = root.items ?? [];
+  const at = u.now ?? new Date().toISOString();
+  let it = items.find((i) => i.id === u.id);
+  if (!it) {
+    if (!u.kind) throw new Error('--kind is required for a new invocation');
+    it = { id: u.id, kind: u.kind, status: u.status, nodes: u.nodes ?? [] };
+    items.push(it);
+  }
+  it.status = u.status;
+  if (u.kind) it.kind = u.kind;
+  if (u.nodes?.length) it.nodes = u.nodes;
+  if (u.runUrl) it.run_url = u.runUrl;
+  if (u.status === 'in_progress' || u.status === 'queued') it.started ??= at;
+  if (u.status === 'success' || u.status === 'failure') it.finished = at;
+  writeFileSync(file, YAML.stringify({ items }));
+}
