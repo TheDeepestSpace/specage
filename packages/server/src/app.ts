@@ -119,7 +119,7 @@ export function createApp({ env, db, github, now = Date.now }: Deps) {
         // CodeMirror (style-mod) injects <style> elements at runtime
         "style-src 'self' 'unsafe-inline'",
         "connect-src 'self'",
-        "img-src 'self' https://*.githubusercontent.com https://github.com",
+        "img-src 'self' data: https://*.githubusercontent.com https://github.com",
         "media-src 'self' https://*.githubusercontent.com",
         "frame-ancestors 'none'",
         "base-uri 'none'",
