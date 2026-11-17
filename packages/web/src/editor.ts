@@ -16,6 +16,7 @@ import {
   foldKeymap,
   foldedRanges,
 } from '@codemirror/language';
+import { specTokens } from './highlight.js';
 import { linter, lintGutter, type Diagnostic as CmDiag } from '@codemirror/lint';
 import {
   Compartment,
@@ -30,6 +31,7 @@ import {
   EditorView,
   GutterMarker,
   ViewPlugin,
+  WidgetType,
   drawSelection,
   gutter,
   hoverTooltip,
@@ -50,6 +52,7 @@ import {
   nodeAtLine,
   slug,
   statementLines,
+  statementLastLines,
   type Analysis,
 } from './analysis.js';
 import { conflictDialog } from './conflict.js';
@@ -59,6 +62,8 @@ import { renderMarkdown } from './markdown.js';
 import { openFor } from './questions.js';
 import { loadChecker, misspellings, type Checker } from './spellcheck.js';
 import { renderPane } from './tracepane.js';
+import { badges } from './traces.js';
+import { openImpModal, openPrfModal } from './tracemodal.js';
 import { openCount } from './threads.js';
 import { aggregateText } from './viewer.js';
 
@@ -70,6 +75,7 @@ const schemeTheme = (dark: boolean) => EditorView.theme({}, { dark });
 const emptyState = (): State => ({
   trace: { retired_ids: [], consumed_lineage: [], nodes: {} },
   work: { items: [] },
+  invocations: [],
   questions: [],
   thread_events: [],
 });
@@ -95,6 +101,7 @@ export async function renderEditor(root: HTMLElement, repo: string) {
         return {
           trace: s.trace,
           work: s.work,
+          invocations: s.invocations ?? [],
           questions: s.questions,
           thread_events: [],
         } as State;
@@ -103,6 +110,19 @@ export async function renderEditor(root: HTMLElement, repo: string) {
   } catch (e: any) {
     root.replaceChildren(h('p', { class: 'error' }, `Cannot open ${repo}: ${e.message}`));
     return;
+  }
+  // realtime: the server pushes an event when the trail branch gets a commit (dispatch check-in/out)
+  if (typeof EventSource !== 'undefined') {
+    const es = new EventSource(`/api/r/${repo}/events`);
+    es.addEventListener('trail', () => {
+      api('GET', `/api/r/${repo}/state`)
+        .then((s: any) => {
+          state = { ...state, work: s.work, invocations: s.invocations ?? [], trace: s.trace };
+          active = new Set<string>(s.active_nodes ?? []);
+          paneUpdate();
+        })
+        .catch(() => {});
+    });
   }
   let baseSha = spec.head_sha;
   let baseText = spec.content;
@@ -208,6 +228,70 @@ export async function renderEditor(root: HTMLElement, repo: string) {
     },
   });
 
+  // small `imp` (orange) / `prf` (purple) badges at the end of a statement's first line; click opens the trace modal
+  class TraceBadge extends WidgetType {
+    constructor(
+      readonly kind: 'imp' | 'prf',
+      readonly id: string,
+    ) {
+      super();
+    }
+    eq(o: TraceBadge) {
+      return o.kind === this.kind && o.id === this.id;
+    }
+    toDOM() {
+      const s = document.createElement('span');
+      s.className = `trace-badge ${this.kind}`;
+      s.dataset.kind = this.kind;
+      s.title = this.kind === 'imp' ? 'implementation trace' : 'proof trace';
+      s.textContent = this.kind;
+      // keep the editor selection / vim mode untouched
+      s.addEventListener('mousedown', (e) => e.preventDefault());
+      s.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const ev = state.trace.nodes[this.id]?.evidence ?? [];
+        (this.kind === 'imp' ? openImpModal : openPrfModal)(repo, this.id, ev);
+      });
+      return s;
+    }
+    ignoreEvent() {
+      return true;
+    }
+  }
+  const traceBadges = ViewPlugin.fromClass(
+    class {
+      decorations: DecorationSet;
+      constructor(v: EditorView) {
+        this.decorations = this.build(v);
+      }
+      update(u: ViewUpdate) {
+        if (u.docChanged || u.transactions.some((t) => t.effects.some((e) => e.is(setState))))
+          this.decorations = this.build(u.view);
+      }
+      build(v: EditorView): DecorationSet {
+        const doc = v.state.doc;
+        const out: Range<Decoration>[] = [];
+        const an = v.state.field(analysisField);
+        const last = statementLastLines(an);
+        for (const [ln, n] of statementLines(an)) {
+          if (ln > doc.lines || !n.id) continue;
+          const b = badges(state.trace.nodes[n.id]?.evidence ?? []);
+          for (const kind of ['imp', 'prf'] as const)
+            // imp: only on the statement's last line; prf keeps its per-line behavior
+            if (b[kind] && (kind === 'prf' || last.get(n) === ln))
+              out.push(
+                Decoration.widget({ widget: new TraceBadge(kind, n.id), side: 1 }).range(
+                  doc.line(ln).to,
+                ),
+              );
+        }
+        return Decoration.set(out, true);
+      }
+    },
+    { decorations: (p) => p.decorations },
+  );
+
   // state-tinted background on every line of a statement (scope statements: header..`{` and `}` only)
   const lineTint = ViewPlugin.fromClass(
     class {
@@ -258,16 +342,6 @@ export async function renderEditor(root: HTMLElement, repo: string) {
       h('span', { class: 'cm-foldPlaceholder', onclick }, `… ${prepared || ''}`),
   });
 
-  const decoRe: [RegExp, string][] = [
-    [/(?<=^|\s)#[^\n]*/gm, 'cm-spec-comment'],
-    [/\\[{};@#\\]|\\(?=[ \t]*\r?$)/gm, 'cm-spec-escape'],
-    [
-      /(?<!\\)@[a-z][a-z0-9_.-]*(?:\s*<-\s*[a-z][a-z0-9_.-]*(?:\s*,\s*[a-z][a-z0-9_.-]*)*)?/g,
-      'cm-spec-id',
-    ],
-    [/(?<![\w$\\])\$[a-z][a-z0-9_-]*(?:\.[a-z][a-z0-9_-]*)*/g, 'cm-spec-ref'],
-    [/(?<=(?:^|[;{}])\s*)(?:!\w+(?:[ \t]+\w+)?:|\?|>later:)/gm, 'cm-spec-marker'],
-  ];
   const highlight = ViewPlugin.fromClass(
     class {
       decorations: DecorationSet;
@@ -278,14 +352,11 @@ export async function renderEditor(root: HTMLElement, repo: string) {
         if (u.docChanged) this.decorations = this.build(u.view);
       }
       build(v: EditorView): DecorationSet {
-        const text = v.state.doc.toString();
-        const out: Range<Decoration>[] = [];
-        for (const [re, cls] of decoRe)
-          for (const m of text.matchAll(re))
-            if (m[0])
-              out.push(Decoration.mark({ class: cls }).range(m.index!, m.index! + m[0].length));
+        const out: Range<Decoration>[] = specTokens(v.state.doc.toString()).map((t) =>
+          Decoration.mark({ class: t.cls }).range(t.from, t.to),
+        );
         // brace pairs coloured by nesting depth
-        for (const { at, depth } of scanBraces(text))
+        for (const { at, depth } of scanBraces(v.state.doc.toString()))
           out.push(
             Decoration.mark({ class: depth < 0 ? 'cm-brace-bad' : `cm-brace-d${depth}` }).range(
               at,
@@ -660,6 +731,7 @@ export async function renderEditor(root: HTMLElement, repo: string) {
         analysisField,
         lineNumbers(),
         lineTint,
+        traceBadges,
         statusGutter,
         questionGutter,
         commentGutter,

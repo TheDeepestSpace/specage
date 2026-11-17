@@ -1,3 +1,4 @@
+import { createHmac } from 'node:crypto';
 import YAML from 'yaml';
 import { describe, expect, it } from 'vitest';
 import { RealGitHub, ALLOWED } from '../src/github.js';
@@ -271,6 +272,43 @@ describe('API', () => {
     expect(st.trace.retired_ids).toEqual(['old.id']);
     expect((await h.req('GET', '/api/r/o/other/spec')).status).toBe(404);
     expect((await h.req('GET', '/api/r/o/..%2Fx/spec')).status).toBe(400);
+  });
+  it('state exposes invocations from the trail branch', async () => {
+    const h = harness();
+    await h.signup(auth());
+    h.github.files['specages/r/trail:invocations.yaml'] = YAML.stringify({
+      items: [{ id: 'i1', kind: 'ci_fixer', status: 'queued', nodes: ['a.b'] }],
+    });
+    const st = (await (await h.req('GET', '/api/r/o/r/state')).json()) as any;
+    expect(st.invocations).toMatchObject([{ id: 'i1', kind: 'ci_fixer', status: 'queued' }]);
+  });
+  it('trail push webhook wakes SSE clients (realtime, no polling)', async () => {
+    const h = harness();
+    h.env.webhookSecret = 'hook-secret';
+    await h.signup(auth());
+    const res = await h.req('GET', '/api/r/o/r/events');
+    expect(res.headers.get('content-type')).toContain('text/event-stream');
+    const reader = res.body!.getReader();
+    const dec = new TextDecoder();
+    const read = async (re: RegExp) => {
+      let got = '';
+      while (!re.test(got)) got += dec.decode((await reader.read()).value);
+      return got;
+    };
+    await read(/event: ready/);
+    const hook = (ref: string, sig?: string) => {
+      const body = JSON.stringify({ ref });
+      const good = 'sha256=' + createHmac('sha256', 'hook-secret').update(body).digest('hex');
+      return h.app.request('/hooks/trail', {
+        method: 'POST',
+        body,
+        headers: { 'x-hub-signature-256': sig ?? good, 'content-type': 'application/json' },
+      });
+    };
+    expect((await hook('refs/heads/specages/r/trail', 'sha256=bad')).status).toBe(401);
+    expect((await hook('refs/heads/specages/r/trail')).status).toBe(200);
+    await read(/event: trail/);
+    await reader.cancel();
   });
   it('state exposes active_nodes for in_progress work with an active run', async () => {
     let skew = 0;
@@ -784,5 +822,17 @@ describe('auto-merge setup detection', () => {
       auto_merge: 'unverified',
       gate: 'unverified',
     });
+  });
+
+  it('serves project files only at a full commit sha', async () => {
+    const h = harness();
+    await h.signup(auth());
+    const sha = 'a'.repeat(40);
+    h.github.repoFiles.set(`o/r:${sha}:src/a.ts`, 'hello');
+    const get = (q: string) => h.req('GET', `/api/r/o/r/file?${q}`);
+    expect(await (await get(`path=src/a.ts&commit=${sha}`)).json()).toEqual({ content: 'hello' });
+    expect((await get('path=src/a.ts&commit=main')).status).toBe(400);
+    expect((await get(`path=../x&commit=${sha}`)).status).toBe(400);
+    expect((await get(`path=src/b.ts&commit=${sha}`)).status).toBe(404);
   });
 });

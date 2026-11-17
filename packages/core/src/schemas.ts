@@ -145,9 +145,31 @@ export const OutboxSchema = z.object({
 });
 export type OutboxEntry = z.infer<typeof OutboxSchema>;
 
+export const InvocationKinds = [
+  'planner',
+  'worker',
+  'reviewer',
+  'ci_fixer',
+  'conflict_resolver',
+] as const;
+/** One dispatch run, written by the unconditional check-in (queued/in_progress) and check-out (success/failure) steps. */
+export const InvocationSchema = z.object({
+  id: z.string(),
+  kind: z.enum(InvocationKinds),
+  status: z.enum(['queued', 'in_progress', 'success', 'failure']),
+  /** spec node ids the dispatch is part of */
+  nodes: z.array(z.string()).default([]),
+  run_url: z.string().optional(),
+  started: z.string().optional(),
+  finished: z.string().optional(),
+});
+export const InvocationsSchema = z.object({ items: z.array(InvocationSchema).default([]) });
+export type Invocation = z.infer<typeof InvocationSchema>;
+
 export interface State {
   trace: Trace;
   work: Work;
+  invocations: Invocation[];
   questions: Question[];
   thread_events: ThreadEvent[];
 }

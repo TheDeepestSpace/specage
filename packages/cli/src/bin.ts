@@ -2,6 +2,7 @@
 import { CliError, parseArgs } from './util.js';
 import {
   cmdCallback,
+  cmdInvocation,
   cmdCursor,
   cmdDiff,
   cmdHash,
@@ -28,6 +29,7 @@ const HELP = `specage <command>
   plan undispatched <trail dir> --spec <file|ref> [--write]   (enqueue implement entries for filed, never-dispatched issues)
   cursor [--tag <dispatch tag>] [--project <name>]
   outbox fire (--range <a>..<b> | --unfired --cwd <trail checkout>) --repo <o/r> --intern <o/r> --project <p> --data-repo <o/r> [--specage-repo <o/r>] [--dry-run]
+  invocation --id <id> --status <queued|in_progress|success|failure> [--kind <k>] [--nodes a,b] [--run-url <u>] [--state-dir <trail checkout>]
   callback --status <s> --context <json> [--pr <n>] [--issue <n>] [--state-dir <trail checkout>] [--intern <o/r> --specage-repo <o/r> --data-repo <o/r>] [--dry-run]
   render --spec <file> --state <dir> --out <dir>
 
@@ -61,6 +63,8 @@ async function main(): Promise<number> {
       return cmdCursor(a);
     case 'outbox':
       return cmdOutbox(a);
+    case 'invocation':
+      return cmdInvocation(a);
     case 'callback':
       return cmdCallback(a);
     case 'render':

@@ -1,8 +1,14 @@
 import { expect, test, type Page } from '@playwright/test';
 import { mockApi, THREADS } from './mocks.js';
 
-async function openEditor(page: Page, spec?: string, text = 'Shooting', threads?: unknown[]) {
-  await mockApi(page, { spec, threads });
+async function openEditor(
+  page: Page,
+  spec?: string,
+  text = 'Shooting',
+  threads?: unknown[],
+  evidence?: unknown[],
+) {
+  await mockApi(page, { spec, threads, evidence });
   await page.goto('/r/acme/tbgwaf');
   await expect(page.locator('.cm-content')).toContainText(text);
   await expect(page.locator('.cm-gutters')).toBeVisible();
@@ -69,6 +75,17 @@ test('editor: sidebar with pinned node', async ({ page }) => {
   await expect(page).toHaveScreenshot('editor-pinned.png');
 });
 
+test('status pane: statement font-family matches the code panel', async ({ page }) => {
+  await openEditor(page);
+  await page.locator('.cm-line', { hasText: 'never exceeds the magazine' }).click();
+  await expect(page.locator('#crumbs strong')).toHaveText('shoot.burst.cap');
+  const statement = page.locator('#pane .ptext-code').first();
+  await expect(statement).toBeVisible();
+  const family = (loc: ReturnType<Page['locator']>) =>
+    loc.evaluate((el) => getComputedStyle(el).fontFamily);
+  expect(await family(statement)).toBe(await family(page.locator('.cm-scroller').first()));
+});
+
 test('editor: empty pane state', async ({ page }) => {
   await openEditor(page, '# empty\n', 'empty');
   await expect(page.locator('#pane')).toContainText('Place the cursor in a node.');
@@ -89,6 +106,17 @@ test('editor: vim toggle (persisted, mode indicator, :w saves)', async ({ page }
   await expect(page.locator('.cm-fat-cursor').first()).toBeVisible();
   await page.keyboard.press('i');
   await expect(mode).toHaveText('INSERT');
+  // insert mode: block cursor too (one character wide, no thin line)
+  const insertBlock = await page
+    .locator('.cm-cursor.cm-cursor-primary')
+    .first()
+    .evaluate((el) => {
+      const cs = getComputedStyle(el);
+      return { w: parseFloat(cs.width), border: cs.borderLeftStyle, bg: cs.backgroundColor };
+    });
+  expect(insertBlock.w).toBeGreaterThan(4);
+  expect(insertBlock.border).toBe('none');
+  expect(insertBlock.bg).not.toBe('rgba(0, 0, 0, 0)');
   await page.keyboard.type('x');
   await page.keyboard.type('qx');
   await expect(page.locator('.cm-content')).toContainText('qx');
@@ -282,4 +310,49 @@ test('comments: composer shows a pasted image thumbnail', async ({ page }) => {
   });
   await expect(page.locator('#threads .thumbs .thumb')).toHaveCount(1);
   await expect(page.locator('#threads')).toHaveScreenshot('composer-thumbnail.png');
+});
+
+const C = 'c'.repeat(40);
+const EVIDENCE = [
+  { kind: 'code', ref: 'src/gun.ts#L3-L6', commit: C },
+  { kind: 'code', ref: 'src/gun.ts#L20', commit: C },
+  { kind: 'code', ref: 'src/missing.ts', commit: C },
+  { kind: 'test', ref: 'test/gun.test.ts', commit: C },
+  { kind: 'screenshot', ref: 'shots/burst.png', commit: C },
+];
+
+test('editor: imp/prf badges and modals', async ({ page }) => {
+  await openEditor(page, undefined, 'Shooting', undefined, EVIDENCE);
+  const line = page.locator('.cm-line', { hasText: 'never exceeds the magazine' });
+  const imp = line.locator('.trace-badge.imp');
+  const prf = line.locator('.trace-badge.prf');
+  await expect(imp).toHaveText('imp');
+  await expect(prf).toHaveText('prf');
+  await expect(page.locator('.trace-badge')).toHaveCount(2); // only nodes with evidence
+
+  await imp.click();
+  const dlg = page.locator('dialog.trace-modal');
+  await expect(dlg.locator('.trace-tab')).toHaveText(['src/gun.ts', 'src/missing.ts']);
+  await expect(dlg.locator('.trace-file')).toContainText('src/gun.ts line 3');
+  await expect(dlg.locator('.cm-trace-hl')).toHaveCount(5); // L3-L6 + L20
+  await expect(page).toHaveScreenshot('trace-imp.png');
+  await dlg.locator('.trace-tab', { hasText: 'missing' }).click();
+  await expect(dlg.locator('.error')).toContainText('Cannot load src/missing.ts');
+  await dlg.locator('.trace-close').click();
+  await expect(dlg).toHaveCount(0);
+
+  await prf.click();
+  await expect(dlg.locator('.trace-proofs li')).toHaveCount(2);
+  await expect(page).toHaveScreenshot('trace-prf.png');
+});
+
+test('trace pane: dispatch invocation cards show kind and status', async ({ page }) => {
+  await openEditor(page);
+  await page.locator('.cm-line', { hasText: 'never exceeds the magazine' }).click();
+  await expect(page.locator('#crumbs strong')).toHaveText('shoot.burst.cap');
+  const cards = page.locator('.inv-card');
+  await expect(cards).toHaveCount(2);
+  await expect(cards.first()).toContainText('worker');
+  await expect(cards.first()).toContainText('in progress');
+  await expect(cards.nth(1)).toContainText('success');
 });

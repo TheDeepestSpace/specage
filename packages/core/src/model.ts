@@ -37,6 +37,10 @@ export interface SpecNode {
   lineage: string[];
   /** IDs referenced as `$id` in the text (deduped, in order of appearance) */
   refs: string[];
+  /** variable declared by this statement (`@name=<statement>`); scope is the enclosing block */
+  variable?: string;
+  /** names of variables in scope referenced as `$name` (resolved before `$id` refs; excluded from `refs`) */
+  varRefs?: string[];
   line: number;
   column: number;
   endLine: number;

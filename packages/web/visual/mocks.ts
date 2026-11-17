@@ -44,6 +44,16 @@ export const STATE = {
       },
     ],
   },
+  invocations: [
+    {
+      id: 'inv-1',
+      kind: 'worker',
+      status: 'in_progress',
+      nodes: ['shoot.burst.cap'],
+      run_url: 'https://github.com/acme/tbgwaf/actions/runs/1',
+    },
+    { id: 'inv-2', kind: 'reviewer', status: 'success', nodes: ['shoot.burst.cap'] },
+  ],
   questions: [],
   report: null,
 };
@@ -79,6 +89,8 @@ export const THREADS = [
 
 export interface MockOpts {
   threads?: unknown[];
+  /** evidence attached to shoot.burst.cap */
+  evidence?: unknown[];
   repos?: string[];
   spec?: string;
   setup?: { auto_merge: string; gate: string; fix: string[]; ready: boolean };
@@ -110,8 +122,20 @@ export async function mockApi(page: Page, o: MockOpts = {}) {
         json({ content: o.spec ?? SPEC, head_sha: 'a'.repeat(40), path: 'tbgwaf.specage' }),
       );
     }
-    if (/\/api\/r\/[^/]+\/[^/]+\/state$/.test(u))
-      return r.fulfill(json({ ...STATE, threads: o.threads ?? [] }));
+    if (/\/api\/r\/[^/]+\/[^/]+\/state$/.test(u)) {
+      const st = JSON.parse(JSON.stringify(STATE));
+      if (o.evidence) st.trace.nodes['shoot.burst.cap'].evidence = o.evidence;
+      return r.fulfill(json({ ...st, threads: o.threads ?? [] }));
+    }
+    if (/\/api\/r\/[^/]+\/[^/]+\/file$/.test(u)) {
+      const path = new URL(r.request().url()).searchParams.get('path')!;
+      if (path.includes('missing')) return r.fulfill(json({ error: 'file not found' }, 404));
+      return r.fulfill(
+        json({
+          content: Array.from({ length: 30 }, (_, i) => `// ${path} line ${i + 1}`).join('\n'),
+        }),
+      );
+    }
     if (/\/api\/r\/[^/]+\/[^/]+\/comments$/.test(u)) {
       const op = r.request().postDataJSON();
       const ts = JSON.parse(JSON.stringify(o.threads ?? [])) as any[];
