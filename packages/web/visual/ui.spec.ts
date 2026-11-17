@@ -106,6 +106,17 @@ test('editor: vim toggle (persisted, mode indicator, :w saves)', async ({ page }
   await expect(page.locator('.cm-fat-cursor').first()).toBeVisible();
   await page.keyboard.press('i');
   await expect(mode).toHaveText('INSERT');
+  // insert mode: block cursor too (one character wide, no thin line)
+  const insertBlock = await page
+    .locator('.cm-cursor.cm-cursor-primary')
+    .first()
+    .evaluate((el) => {
+      const cs = getComputedStyle(el);
+      return { w: parseFloat(cs.width), border: cs.borderLeftStyle, bg: cs.backgroundColor };
+    });
+  expect(insertBlock.w).toBeGreaterThan(4);
+  expect(insertBlock.border).toBe('none');
+  expect(insertBlock.bg).not.toBe('rgba(0, 0, 0, 0)');
   await page.keyboard.type('x');
   await page.keyboard.type('qx');
   await expect(page.locator('.cm-content')).toContainText('qx');
