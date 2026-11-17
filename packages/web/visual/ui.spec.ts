@@ -321,6 +321,12 @@ test('editor: imp/prf badges and modals', async ({ page }) => {
 
   await prf.click();
   await expect(dlg.locator('.trace-proofs li')).toHaveCount(2);
+  // proof images load asynchronously; wait so the screenshot is deterministic
+  await expect
+    .poll(() =>
+      dlg.locator('img').evaluateAll((els) => els.every((i) => (i as HTMLImageElement).complete)),
+    )
+    .toBe(true);
   await expect(page).toHaveScreenshot('trace-prf.png');
 });
 
