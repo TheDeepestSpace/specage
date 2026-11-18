@@ -1,4 +1,5 @@
 import { scanBraces } from './braces.js';
+import { vimScrollMargin } from './scrollmargin.js';
 import {
   acceptCompletion,
   autocompletion,
@@ -690,7 +691,7 @@ export async function renderEditor(root: HTMLElement, repo: string) {
   const scheme = new Compartment();
   // drawSelection is needed for visual-mode selections; only on while vim is on so the
   // default (native) caret/selection is unchanged otherwise.
-  const vimExt = () => [vim(), drawSelection({ cursorBlinkRate: 0 })];
+  const vimExt = () => [vim(), drawSelection({ cursorBlinkRate: 0 }), vimScrollMargin];
   const showMode = (mode: string, sub?: string) => {
     vimMode.textContent =
       `${mode}${sub === 'linewise' ? ' line' : sub === 'blockwise' ? ' block' : ''}`
