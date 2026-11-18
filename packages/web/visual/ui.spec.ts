@@ -299,7 +299,16 @@ const EVIDENCE = [
   { kind: 'screenshot', ref: 'shots/burst.png', commit: C },
 ];
 
+// 1x1 transparent PNG: proof thumbnails point at github.com, which CI can't (and shouldn't) reach
+const PIXEL = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==',
+  'base64',
+);
+
 test('editor: imp/prf badges and modals', async ({ page }) => {
+  await page.route('https://github.com/acme/tbgwaf/raw/**', (r) =>
+    r.fulfill({ contentType: 'image/png', body: PIXEL }),
+  );
   await openEditor(page, undefined, 'Shooting', undefined, EVIDENCE);
   const line = page.locator('.cm-line', { hasText: 'never exceeds the magazine' });
   const imp = line.locator('.trace-badge.imp');
@@ -321,10 +330,12 @@ test('editor: imp/prf badges and modals', async ({ page }) => {
 
   await prf.click();
   await expect(dlg.locator('.trace-proofs li')).toHaveCount(2);
-  // proof images load asynchronously; wait so the screenshot is deterministic
+  // proof images load asynchronously; wait for them to actually decode
   await expect
     .poll(() =>
-      dlg.locator('img').evaluateAll((els) => els.every((i) => (i as HTMLImageElement).complete)),
+      dlg
+        .locator('img')
+        .evaluateAll((els) => els.every((i) => (i as HTMLImageElement).naturalWidth > 0)),
     )
     .toBe(true);
   await expect(page).toHaveScreenshot('trace-prf.png');
