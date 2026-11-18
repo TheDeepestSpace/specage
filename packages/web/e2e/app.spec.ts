@@ -163,6 +163,16 @@ test('code panel draws a 100-column ruler', async () => {
     return [r.offsetLeft, c.offsetLeft, parseFloat(getComputedStyle(l).paddingLeft), w];
   });
   expect(Math.abs(rx - (cx + pad + 100 * cw))).toBeLessThan(2);
+  const [bg, line] = await page.evaluate(() => {
+    const r = document.querySelector('.cm-ruler') as HTMLElement;
+    const p = document.createElement('i');
+    p.style.background = getComputedStyle(document.documentElement).getPropertyValue('--line');
+    document.body.appendChild(p);
+    const l = getComputedStyle(p).backgroundColor;
+    p.remove();
+    return [getComputedStyle(r).backgroundColor, l];
+  });
+  expect(bg).not.toBe(line);
   await page.screenshot({ path: 'test-results/ruler.png' });
 });
 

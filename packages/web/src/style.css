@@ -395,8 +395,8 @@ pre {
 .cm-editor .cm-ruler {
   position: absolute;
   top: 0;
-  width: 1px;
-  background: var(--line);
+  width: 2px;
+  background: color-mix(in srgb, var(--fg) 40%, transparent); /* clearly visible, unlike --line */
   pointer-events: none;
   z-index: 0;
 }
