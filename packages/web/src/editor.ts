@@ -1,5 +1,5 @@
 import { scanBraces } from './braces.js';
-import { vimScrollMargin } from './scrollmargin.js';
+import { vimExt } from './vimext.js';
 import {
   acceptCompletion,
   autocompletion,
@@ -33,7 +33,6 @@ import {
   GutterMarker,
   ViewPlugin,
   WidgetType,
-  drawSelection,
   gutter,
   hoverTooltip,
   keymap,
@@ -41,7 +40,7 @@ import {
   type DecorationSet,
   type ViewUpdate,
 } from '@codemirror/view';
-import { Vim, getCM, vim } from '@replit/codemirror-vim';
+import { Vim, getCM } from '@replit/codemirror-vim';
 import { diff as coreDiff, lint, parse, type State, type Thread } from '@specage/core/browser';
 import { api, ApiError, loadMe } from './api.js';
 import {
@@ -689,9 +688,6 @@ export async function renderEditor(root: HTMLElement, repo: string) {
   // ---- vim (opt-in, persisted) ----
   const vimConf = new Compartment();
   const scheme = new Compartment();
-  // drawSelection is needed for visual-mode selections; only on while vim is on so the
-  // default (native) caret/selection is unchanged otherwise.
-  const vimExt = () => [vim(), drawSelection({ cursorBlinkRate: 0 }), vimScrollMargin];
   const showMode = (mode: string, sub?: string) => {
     vimMode.textContent =
       `${mode}${sub === 'linewise' ? ' line' : sub === 'blockwise' ? ' block' : ''}`
