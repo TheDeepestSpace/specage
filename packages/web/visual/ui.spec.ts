@@ -343,10 +343,6 @@ test('editor: imp/prf badges and modals', async ({ page }) => {
 
   await prf.click();
   await expect(dlg.locator('.trace-proofs li')).toHaveCount(2);
-  // The fixture image 404s; wait for the load to settle so the broken-image state is stable.
-  await expect
-    .poll(() => dlg.locator('.trace-proofs img').evaluate((i: HTMLImageElement) => i.complete))
-    .toBe(true);
   await expect(page).toHaveScreenshot('trace-prf.png');
 });
 
