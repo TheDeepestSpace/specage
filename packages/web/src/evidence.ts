@@ -4,15 +4,25 @@ import { h, safeUrl } from './dom.js';
 const IMG = /\.(png|jpe?g|gif|webp)$/i;
 const VID = /\.(webm|mp4)$/i;
 
-function fileUrl(repo: string | undefined, e: Evidence, raw = false): string | null {
+const LINE_FRAG = /^L\d+(-L\d+)?$/;
+
+/** Path of a ref: before `#`, and only the leading token if prose follows (legacy traces). */
+export function refPath(ref: string): string {
+  return ref.split('#')[0].trim().split(/\s/)[0];
+}
+
+export function fileUrl(repo: string | undefined, e: Evidence, raw = false): string | null {
   if (!repo) return null;
   if (e.kind === 'pr') return safeUrl(`https://github.com/${repo}/pull/${e.ref}`);
   if (e.kind === 'issue') return safeUrl(`https://github.com/${repo}/issues/${e.ref}`);
   if (/^https:\/\//.test(e.ref)) return safeUrl(e.ref);
   if (!e.commit) return null; // evidence must be pinned to a commit; never link a branch
-  const [path, frag] = e.ref.split('#');
+  const path = refPath(e.ref);
+  if (!path) return null;
+  const hash = e.ref.indexOf('#');
+  const frag = hash < 0 ? '' : e.ref.slice(hash + 1);
   const base = `https://github.com/${repo}/${raw ? 'raw' : 'blob'}/${e.commit}/${path.split('/').map(encodeURIComponent).join('/')}`;
-  return safeUrl(raw || !frag ? base : `${base}#${frag}`);
+  return safeUrl(raw || !LINE_FRAG.test(frag) ? base : `${base}#${frag}`);
 }
 
 function lightbox(src: string) {
@@ -45,7 +55,7 @@ export function evidenceView(e: Evidence, repo?: string): HTMLElement {
       : h('span', {}, e.ref),
   );
   if (e.commit) li.append(h('code', { class: 'sha' }, e.commit.slice(0, 7)));
-  const path = e.ref.split('#')[0];
+  const path = refPath(e.ref);
   const raw = fileUrl(repo, e, true);
   if (raw && IMG.test(path)) {
     const img = h('img', {
