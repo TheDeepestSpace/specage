@@ -16,6 +16,7 @@ import {
   foldKeymap,
   foldedRanges,
 } from '@codemirror/language';
+import { specTokens } from './highlight.js';
 import { linter, lintGutter, type Diagnostic as CmDiag } from '@codemirror/lint';
 import {
   Compartment,
@@ -51,6 +52,7 @@ import {
   nodeAtLine,
   slug,
   statementLines,
+  statementLastLines,
   type Analysis,
 } from './analysis.js';
 import { conflictDialog } from './conflict.js';
@@ -270,11 +272,14 @@ export async function renderEditor(root: HTMLElement, repo: string) {
       build(v: EditorView): DecorationSet {
         const doc = v.state.doc;
         const out: Range<Decoration>[] = [];
-        for (const [ln, n] of statementLines(v.state.field(analysisField))) {
+        const an = v.state.field(analysisField);
+        const last = statementLastLines(an);
+        for (const [ln, n] of statementLines(an)) {
           if (ln > doc.lines || !n.id) continue;
           const b = badges(state.trace.nodes[n.id]?.evidence ?? []);
           for (const kind of ['imp', 'prf'] as const)
-            if (b[kind])
+            // imp: only on the statement's last line; prf keeps its per-line behavior
+            if (b[kind] && (kind === 'prf' || last.get(n) === ln))
               out.push(
                 Decoration.widget({ widget: new TraceBadge(kind, n.id), side: 1 }).range(
                   doc.line(ln).to,
@@ -337,16 +342,6 @@ export async function renderEditor(root: HTMLElement, repo: string) {
       h('span', { class: 'cm-foldPlaceholder', onclick }, `… ${prepared || ''}`),
   });
 
-  const decoRe: [RegExp, string][] = [
-    [/(?<=^|\s)#[^\n]*/gm, 'cm-spec-comment'],
-    [/\\[{};@#\\]|\\(?=[ \t]*\r?$)/gm, 'cm-spec-escape'],
-    [
-      /(?<!\\)@[a-z][a-z0-9_.-]*(?:\s*<-\s*[a-z][a-z0-9_.-]*(?:\s*,\s*[a-z][a-z0-9_.-]*)*)?/g,
-      'cm-spec-id',
-    ],
-    [/(?<![\w$\\])\$[a-z][a-z0-9_-]*(?:\.[a-z][a-z0-9_-]*)*/g, 'cm-spec-ref'],
-    [/(?<=(?:^|[;{}])\s*)(?:!\w+(?:[ \t]+\w+)?:|\?|>later:)/gm, 'cm-spec-marker'],
-  ];
   const highlight = ViewPlugin.fromClass(
     class {
       decorations: DecorationSet;
@@ -357,14 +352,11 @@ export async function renderEditor(root: HTMLElement, repo: string) {
         if (u.docChanged) this.decorations = this.build(u.view);
       }
       build(v: EditorView): DecorationSet {
-        const text = v.state.doc.toString();
-        const out: Range<Decoration>[] = [];
-        for (const [re, cls] of decoRe)
-          for (const m of text.matchAll(re))
-            if (m[0])
-              out.push(Decoration.mark({ class: cls }).range(m.index!, m.index! + m[0].length));
+        const out: Range<Decoration>[] = specTokens(v.state.doc.toString()).map((t) =>
+          Decoration.mark({ class: t.cls }).range(t.from, t.to),
+        );
         // brace pairs coloured by nesting depth
-        for (const { at, depth } of scanBraces(text))
+        for (const { at, depth } of scanBraces(v.state.doc.toString()))
           out.push(
             Decoration.mark({ class: depth < 0 ? 'cm-brace-bad' : `cm-brace-d${depth}` }).range(
               at,
