@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { mockApi, THREADS } from './mocks.js';
+import { useBackend, THREADS } from './mocks.js';
 
 async function openEditor(
   page: Page,
@@ -8,7 +8,7 @@ async function openEditor(
   threads?: unknown[],
   evidence?: unknown[],
 ) {
-  await mockApi(page, { spec, threads, evidence });
+  await useBackend(page, { spec, threads, evidence });
   await page.goto('/r/acme/tbgwaf');
   await expect(page.locator('.cm-content')).toContainText(text);
   await expect(page.locator('.cm-gutters')).toBeVisible();
@@ -16,14 +16,14 @@ async function openEditor(
 }
 
 test('repos list', async ({ page }) => {
-  await mockApi(page);
+  await useBackend(page);
   await page.goto('/');
   await expect(page.locator('#repos a')).toHaveCount(2);
   await expect(page).toHaveScreenshot('repos.png', { fullPage: true });
 });
 
 test('repos list: empty state', async ({ page }) => {
-  await mockApi(page, { repos: [], initRepos: [] });
+  await useBackend(page, { repos: [], initRepos: [] });
   await page.goto('/');
   await expect(page.locator('#repos')).toContainText('No specage-enabled repos found.');
   await expect(page).toHaveScreenshot('repos-empty.png', { fullPage: true });
@@ -262,18 +262,14 @@ test('comments: marker, thread popover, resolve/reopen filter, new thread', asyn
   await expect(panel).toContainText('Another thought');
 });
 
-const FIX_AM = 'Settings → General → Pull Requests: enable "Allow auto-merge".';
-const FIX_GATE =
-  'Settings → Branches (or Rules): require the status check "ci-gate" on the default branch.';
-
 test('editor: no setup badge once auto-merge is configured', async ({ page }) => {
   await openEditor(page);
   await expect(page.locator('.setup-badge')).toHaveCount(0);
 });
 
 test('editor: setup warning (missing)', async ({ page }) => {
-  await mockApi(page, {
-    setup: { auto_merge: 'missing', gate: 'missing', fix: [FIX_AM, FIX_GATE], ready: false },
+  await useBackend(page, {
+    setup: { auto_merge: 'missing', gate: 'missing' },
   });
   await page.goto('/r/acme/tbgwaf');
   await page.locator('.setup-badge').click();
@@ -282,8 +278,8 @@ test('editor: setup warning (missing)', async ({ page }) => {
 });
 
 test('editor: setup warning (unverified)', async ({ page }) => {
-  await mockApi(page, {
-    setup: { auto_merge: 'unverified', gate: 'unverified', fix: [FIX_AM, FIX_GATE], ready: false },
+  await useBackend(page, {
+    setup: { auto_merge: 'unverified', gate: 'unverified' },
   });
   await page.goto('/r/acme/tbgwaf');
   await page.locator('.setup-badge').click();
@@ -309,6 +305,10 @@ test('comments: composer shows a pasted image thumbnail', async ({ page }) => {
     );
   });
   await expect(page.locator('#threads .thumbs .thumb')).toHaveCount(1);
+  // the real server's CSP must allow the data: thumbnail to render
+  await expect
+    .poll(() => page.locator('#threads .thumb').evaluate((i: HTMLImageElement) => i.naturalWidth))
+    .toBe(1);
   await expect(page.locator('#threads')).toHaveScreenshot('composer-thumbnail.png');
 });
 
@@ -321,7 +321,16 @@ const EVIDENCE = [
   { kind: 'screenshot', ref: 'shots/burst.png', commit: C },
 ];
 
+// 1x1 transparent PNG: proof thumbnails point at github.com, which CI can't (and shouldn't) reach
+const PIXEL = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==',
+  'base64',
+);
+
 test('editor: imp/prf badges and modals', async ({ page }) => {
+  await page.route('https://github.com/acme/tbgwaf/raw/**', (r) =>
+    r.fulfill({ contentType: 'image/png', body: PIXEL }),
+  );
   await openEditor(page, undefined, 'Shooting', undefined, EVIDENCE);
   const line = page.locator('.cm-line', { hasText: 'never exceeds the magazine' });
   const imp = line.locator('.trace-badge.imp');
@@ -343,6 +352,14 @@ test('editor: imp/prf badges and modals', async ({ page }) => {
 
   await prf.click();
   await expect(dlg.locator('.trace-proofs li')).toHaveCount(2);
+  // proof images load asynchronously; wait for them to actually decode
+  await expect
+    .poll(() =>
+      dlg
+        .locator('img')
+        .evaluateAll((els) => els.every((i) => (i as HTMLImageElement).naturalWidth > 0)),
+    )
+    .toBe(true);
   await expect(page).toHaveScreenshot('trace-prf.png');
 });
 

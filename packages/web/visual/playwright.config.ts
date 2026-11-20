@@ -9,6 +9,7 @@ export default defineConfig({
   testDir: '.',
   testMatch: '*.spec.ts',
   snapshotPathTemplate: '{testDir}/__screenshots__/{testFilePath}/{arg}-{projectName}{ext}',
+  workers: 1, // one real backend whose scenario state is per test
   timeout: 30_000,
   reporter: [['list'], ['html', { open: 'never', outputFolder: 'playwright-report' }]],
   outputDir: 'test-results',
@@ -26,10 +27,17 @@ export default defineConfig({
     },
   ],
   webServer: {
-    // serves the built SPA (npm run build first); every API call is mocked in the tests.
-    command: 'node packages/web/visual/serve.mjs packages/web/dist 4174',
+    // the real @specage/server serving the built SPA (npm run build first); GitHub is its in-memory stub
+    command: 'node packages/server/dist/visual-server.js',
     cwd: root,
-    url: 'http://127.0.0.1:4174/',
+    url: 'http://127.0.0.1:4174/healthz',
     reuseExistingServer: false,
+    env: {
+      NODE_ENV: 'development',
+      PORT: '4174',
+      PUBLIC_URL: 'http://127.0.0.1:4174',
+      OWNER_PUBKEY: 'ssh-ed25519 AAAA unused',
+      WEB_DIST: `${root}/packages/web/dist`,
+    },
   },
 });
