@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { cmdReviewStart } from './review.js';
 import { CliError, parseArgs } from './util.js';
 import {
   cmdCallback,
@@ -31,6 +32,7 @@ const HELP = `specage <command>
   outbox fire (--range <a>..<b> | --unfired --cwd <trail checkout>) --repo <o/r> --intern <o/r> --project <p> --data-repo <o/r> [--specage-repo <o/r>] [--dry-run]
   invocation --id <id> --status <queued|in_progress|success|failure> [--kind <k>] [--nodes a,b] [--run-url <u>] [--state-dir <trail checkout>]
   callback --status <s> --context <json> [--pr <n>] [--issue <n>] [--state-dir <trail checkout>] [--intern <o/r> --specage-repo <o/r> --data-repo <o/r>] [--dry-run]
+  review-start --config <.specage/config.yaml> --repo <o/r> --pr <n> --head-sha <sha> [--remote <url>] [--dry-run]
   render --spec <file> --state <dir> --out <dir>
 
 exit codes: 0 ok, 1 lint/validation errors, 2 usage, 3 git/GitHub error`;
@@ -67,6 +69,8 @@ async function main(): Promise<number> {
       return cmdInvocation(a);
     case 'callback':
       return cmdCallback(a);
+    case 'review-start':
+      return cmdReviewStart(a);
     case 'render':
       return cmdRender(a);
     default:
