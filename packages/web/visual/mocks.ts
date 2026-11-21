@@ -54,8 +54,6 @@ export const STATE = {
     },
     { id: 'inv-2', kind: 'reviewer', status: 'success', nodes: ['shoot.burst.cap'] },
   ],
-  questions: [],
-  report: null,
 };
 
 export const THREADS = [
@@ -87,74 +85,46 @@ export const THREADS = [
   },
 ];
 
-export interface MockOpts {
+export interface BackendOpts {
   threads?: unknown[];
   /** evidence attached to shoot.burst.cap */
   evidence?: unknown[];
   repos?: string[];
   spec?: string;
-  setup?: { auto_merge: string; gate: string; fix: string[]; ready: boolean };
-  initRepos?: { repo: string; private: boolean; initialised: boolean }[];
+  setup?: { auto_merge: string; gate: string };
+  initRepos?: { repo: string; private: boolean }[];
 }
 
-/** Mock every /api and /auth call so the built SPA runs without Fly, GitHub or a passkey. */
-export async function mockApi(page: Page, o: MockOpts = {}) {
-  const json = (body: unknown, status = 200) => ({
-    status,
-    contentType: 'application/json',
-    body: JSON.stringify(body),
+/**
+ * Seed the real @specage/server (visual-server.ts, in-memory GitHub) with a scenario and sign this
+ * page's browser context in. All API traffic then goes to the real backend.
+ */
+export async function useBackend(page: Page, o: BackendOpts = {}) {
+  const st = JSON.parse(JSON.stringify(STATE));
+  if (o.evidence) st.trace.nodes['shoot.burst.cap'].evidence = o.evidence;
+  const repoFiles: Record<string, string> = {};
+  for (const e of (o.evidence ?? []) as { kind: string; ref: string; commit: string }[]) {
+    const path = e.ref.split('#')[0];
+    if (path.includes('missing')) continue;
+    repoFiles[`acme/tbgwaf:${e.commit}:${path}`] = Array.from(
+      { length: 30 },
+      (_, i) => `// ${path} line ${i + 1}`,
+    ).join('\n');
+  }
+  const r = await page.request.post('/__visual/scenario', {
+    data: {
+      spec: o.spec ?? SPEC,
+      trail: {
+        'trace.yaml': st.trace,
+        'work.yaml': st.work,
+        'invocations.yaml': { items: st.invocations },
+      },
+      threads: o.threads,
+      repos: o.repos,
+      setup: o.setup,
+      initRepos: o.initRepos,
+      repoFiles,
+    },
   });
-  const repos = o.repos ?? ['acme/tbgwaf', 'acme/other'];
-  await page.route('**/data.json', (r) => r.fulfill({ status: 404, body: 'no' }));
-  await page.route('**/api/**', (r) => {
-    const u = new URL(r.request().url()).pathname;
-    if (u === '/api/me') return r.fulfill(json({ label: 'owner', expires: 9e12, csrf: 'csrf' }));
-    if (u === '/api/repos') return r.fulfill(json(repos));
-    if (u === '/api/init/repos')
-      return r.fulfill(
-        json(o.initRepos ?? [{ repo: 'acme/new', private: false, initialised: false }]),
-      );
-    if (/\/api\/r\/[^/]+\/[^/]+\/setup$/.test(u))
-      return r.fulfill(json(o.setup ?? { auto_merge: 'ok', gate: 'ok', fix: [], ready: true }));
-    if (/\/api\/r\/[^/]+\/[^/]+\/spec$/.test(u)) {
-      if (r.request().method() === 'PUT') return r.fulfill(json({ head_sha: 'b'.repeat(40) }));
-      return r.fulfill(
-        json({ content: o.spec ?? SPEC, head_sha: 'a'.repeat(40), path: 'tbgwaf.specage' }),
-      );
-    }
-    if (/\/api\/r\/[^/]+\/[^/]+\/state$/.test(u)) {
-      const st = JSON.parse(JSON.stringify(STATE));
-      if (o.evidence) st.trace.nodes['shoot.burst.cap'].evidence = o.evidence;
-      return r.fulfill(json({ ...st, threads: o.threads ?? [] }));
-    }
-    if (/\/api\/r\/[^/]+\/[^/]+\/file$/.test(u)) {
-      const path = new URL(r.request().url()).searchParams.get('path')!;
-      if (path.includes('missing')) return r.fulfill(json({ error: 'file not found' }, 404));
-      return r.fulfill(
-        json({
-          content: Array.from({ length: 30 }, (_, i) => `// ${path} line ${i + 1}`).join('\n'),
-        }),
-      );
-    }
-    if (/\/api\/r\/[^/]+\/[^/]+\/comments$/.test(u)) {
-      const op = r.request().postDataJSON();
-      const ts = JSON.parse(JSON.stringify(o.threads ?? [])) as any[];
-      const t = ts.find((x) => x.id === op.thread);
-      if (op.op === 'resolve') t.state = 'resolved';
-      if (op.op === 'reopen') t.state = 'open';
-      if (op.op === 'reply')
-        t.comments.push({ id: 'x', author: 'owner', at: '2026-10-31T00:00:00Z', body: op.body });
-      if (op.op === 'create')
-        ts.push({
-          id: 't-9',
-          node: op.node,
-          node_hash: 'a'.repeat(12),
-          state: 'open',
-          comments: [{ id: 't-9.1', author: 'owner', at: '2026-10-31T00:00:00Z', body: op.body }],
-        });
-      o.threads = ts;
-      return r.fulfill(json({ threads: ts }));
-    }
-    return r.fulfill(json({ error: 'not mocked' }, 404));
-  });
+  if (!r.ok()) throw new Error(`scenario failed: ${r.status()}`);
 }
