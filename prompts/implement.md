@@ -10,4 +10,4 @@ Spec and trail live in the data repo (`data_repo` in `.specage/config.yaml`, rea
 
 specage re-reads the PR after you finish and re-dispatches you with a correction if the trailers or issue reference are wrong, so do not hand-wave them.
 
-After opening the PR (and after pushing review-requested changes), initiate a specage review: `git clone --no-checkout <data_repo> review && cd review && git fetch origin specages/<project>/review specages/<project>/trail`, check out `specages/<project>/review` if it exists, else `git switch -C specages/<project>/review origin/specages/<project>/trail`, then `git commit --allow-empty -m "review <owner/repo>#<number>"` and `git push origin specages/<project>/review` (fast-forward only; on rejection fetch and retry). This needs write access to the data repo's review branch only; if the push is refused, say so in your final comment.
+A workflow starts the specage review when the PR is opened or pushed to; do not start one yourself.

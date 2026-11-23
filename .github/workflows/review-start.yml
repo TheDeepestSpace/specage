@@ -1,0 +1,44 @@
+name: review-start
+# Starts a specage review when a specage/* PR is opened or pushed, so the agent doesn't have to.
+# Pushes an empty `review <repo>#<pr>` commit to specages/<project>/review in the data repo.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+permissions:
+  contents: read
+concurrency:
+  group: review-start-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+jobs:
+  start:
+    if: startsWith(github.head_ref, 'specage/') && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      # base ref (trusted) provides both the CLI and the config; PR code is never executed
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with: {ref: '${{ github.event.pull_request.base.sha }}'}
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with: {node-version: 22, cache: npm}
+      - run: npm ci --ignore-scripts
+      - run: npx tsc -b packages/core packages/cli
+      - id: app
+        uses: actions/create-github-app-token@v3
+        with:
+          app-id: ${{ secrets.SPECAGE_APP_ID }}
+          private-key: ${{ secrets.SPECAGE_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+      - name: Push review commit
+        env:
+          TOKEN: ${{ steps.app.outputs.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          DATA_REPO_DEFAULT: ${{ vars.SPECAGE_DATA_REPO || 'TheDeepestSpace/specage-data' }}
+        run: |
+          set -euo pipefail
+          cfg=.specage/config.yaml
+          [ -f "$cfg" ] || { echo "no $cfg on base; skipping"; exit 0; }
+          data_repo=$(node -e "console.log(require('yaml').parse(require('fs').readFileSync('$cfg','utf8')).data_repo||'')")
+          node packages/cli/dist/bin.js review-start --config "$cfg" --repo "$REPO" --pr "$PR" --head-sha "$HEAD_SHA" \
+            --remote "https://x-access-token:${TOKEN}@github.com/${data_repo:-$DATA_REPO_DEFAULT}.git"
